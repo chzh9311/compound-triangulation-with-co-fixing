@@ -1,0 +1,136 @@
+DATASET:
+  NAME: human36m
+  H36M_ROOT: /home/chenzhuo/data/h36m-fetch/processed
+  H36M_LABELS: /home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy
+  H36M_MONOLABELS: data/h36m/labels/human36m-monocular-labels-GTbboxes.npy
+MODEL:
+  STYLE: "pytorch"
+  SOFTMAX_BETA: 100
+  IMAGE_SIZE:
+    - 256
+    - 256
+  NUM_JOINTS: 17
+  NUM_BONES: 16
+  INIT_WEIGHTS: True
+  LOAD_FINAL_WEIGHTS: False
+  PRETRAINED: pretrained/pytorch/pose_mpii/pose_resnet_50_256x256.pth.tar
+#  PRETRAINED: log/backbone/Training_NoDensityHM_human3.6m_ResNet50/weights/best.pth
+#  BACKBONE_WEIGHTS: log/remote/sidenet/best.pth
+  BACKBONE_WEIGHTS: pretrained/pytorch/sidenet/pretrained_ResNet50.pth
+
+  # The method to regress density map:
+  # 1. 'direct' means directly regress heatmap using simple regression module;
+  # 2. 'heatmap2d' means output 2d heatmap and regress mathematically.
+  # 3. 'heatmap1d' means output 1d heatmap and regress.
+  # 4. 'offsetmap' refers to vector field that points to the vanishing point.
+  # None for pure joint estimations.
+  DENSITY_REG_METHOD: directionmap
+  USE_CONFIDENCE: False
+
+  BACKBONE: ResNet
+
+  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, directionmap
+  REQUIRED_DATA:
+    - images
+    - heatmap
+    - directionmap
+
+  # Corresponding to the output above, whether to calculate loss
+  # stacked means the maps are stacked up in the above order
+  BACKBONE_OUTPUT:
+    - heatmap
+    - directionmap
+
+  EXTRA:
+    SIGMA: 2
+    HEATMAP_SIZE:
+      - 64
+      - 64
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS:
+      - 256
+      - 256
+      - 256
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+    NUM_LAYERS: 50
+
+  heatmap_sample:
+    SAMPLE_LEVEL: 2
+
+  direct:
+    NUM_REFINE: 2
+
+  multilayer:
+    NUM_REFINE: 2
+    FREEZE_BACKBONE: True
+    LAYER_SIZE_MULTIPLIER: 1
+
+  vanishing_map:
+    FIT_METHOD: rt
+    SOFTMAX_BETA: 100
+    L: 256
+
+  heatmap2d:
+    REG_METHOD: linear # linear or exp
+    ALPHA: 0.001
+    N_SAMPLES: 16
+    OFFSET: 0.0001
+    BLOCK_GRAD: True
+
+  heatmap1d:
+    DENSITY_SIZE: 64
+
+  offsetmap:
+    SAMPLE_LEN: 64
+    # offsetmap type values:
+    # lambda: -1 ~ 0 ~ 1 => 0 ~ +inf ~ -inf ~ 0.
+    # mu: 0 ~ 1 => 0 ~ +inf but the vanishing point can be in the opposite direction.
+    TYPE: mu
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS: # Larget Deconvlutional layers.
+      - 512
+      - 512
+      - 512
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+
+  directionmap:
+
+TRAIN:
+  IS_PRETRAIN: True
+  BATCH_SIZE: 128
+  DATA_PARALLEL: True
+  LEARNING_RATE: 1.0e-4
+  SHUFFLE: True
+  SOFT_EP: 400 # 20^2
+  LOSS_WEIGHT:
+    - 1.0e+4
+    - 0
+  NUM_WORKERS: 16
+  NUM_EPOCHS: 10
+  CONTINUE: True
+  CHECKPOINT: log/backbone/Training_20230217_095244_human36m_ResNet/weights/checkpoint_epoch0_loss3.665279e-02.pkl
+  MID_CHECKPOINTS: 0
+  LOSS_FREQ: 10
+  VIS_FREQ: 500
+
+TEST:
+  WRITE_LOG: True
+  BATCH_SIZE: 128
+  DATA_PARALLEL: True
+  USE_GT_DATA_TYPE:
+  LAMBDA: 5000
+  VIS_FREQ: 10
+  # di / mu / op
+  FUSION_STRATEGY: di
+  SHUFFLE: True
+  NUM_WORKERS: 8

@@ -1,0 +1,12 @@
+future
+numpy
+scipy
+matplotlib
+seaborn
+onnx
+netron
+easydict
+tensorboard
+tqdm
+pyyaml
+opencv-python

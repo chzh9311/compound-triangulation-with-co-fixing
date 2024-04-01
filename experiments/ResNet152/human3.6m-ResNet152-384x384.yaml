@@ -1,0 +1,179 @@
+GPUS:
+  - 0
+DATASET:
+  NAME: human3.6m
+  H36M_ROOT: /home/chenzhuo/data/h36m-fetch/processed
+  H36M_LABELS: /home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy
+  H36M_MONOLABELS: /home/chenzhuo/Projects/DNN_3DHPE/Mine/DensityFieldPose/data/h36m/labels/human36m-monocular-labels-GTbboxes.npy
+  WITH_DAMAGED_ACTIONS: True
+MODEL:
+  NAME: 'lofpose'
+  STYLE: "pytorch"
+  SOFTMAX_BETA: 100
+  SAMPLE_LEVEL: 2
+  NUM_JOINTS: 17
+  NUM_BONES: 16
+  INIT_WEIGHTS: True
+  LOAD_DECONVS: True
+  LOAD_FINAL_WEIGHTS: True
+#  PRETRAINED: pretrained/pytorch/sidenet/ResNet-152-fused.pth
+  # PRETRAINED: previous_folder/log/backbone/h36m_ResNet152_384x384_diremap/weights/best.pth
+  PRETRAINED: ../LOFPose/log/backbone/train_h36m_noMPII/epoch2-6/weights/best.pth
+  
+  # BACKBONE_WEIGHTS: previous_folder/log/backbone/h36m_ResNet152_384x384_diremap/weights/best.pth
+  BACKBONE_WEIGHTS: ../DensityFieldPose/log/end2end/Training_human36m_ResNet152_new_loss_20.8/weights/best.pth
+  # BACKBONE_WEIGHTS: 
+
+  IMAGE_SIZE:
+  - 384
+  - 384
+  # The method to regress density map:
+  # 1. 'direct' means directly regress heatmap using simple regression module;
+  # 2. 'heatmap2d' means output 2d heatmap and regress mathematically.
+  # 3. 'heatmap1d' means output 1d heatmap and regress.
+  # 4. 'offsetmap' refers to vector field that points to the vanishing point.
+  # 5. 'direction_map' refers to
+  # None for pure joint estimations.
+  USE_LOF: True
+  FUSION_STRATEGY: maha
+  NUM_DIMS: 3
+  LAMBDA: 0
+  USE_CONFIDENCE: True
+  CONFIDENCE_NORM: False
+  CO_FIXING:
+    FIX_HEATMAP: False
+    FIX_ALPHA: 0.5
+    VEC_IMPROVE_TH: 0.25
+    VEC_FIX_UB: 0.2
+    PTS_IMPROVE_TH: 0.25
+    PTS_FIX_UB: 400
+
+  BACKBONE: ResNet
+
+  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, directionmap, keypionts3d
+  REQUIRED_DATA:
+    - images
+    - keypoints3d
+    - projections
+    - intrinsics
+    - rotation
+    - cam_ctr
+    - limb_vis
+    - identity
+    - subject
+
+  MODEL_OUTPUT:
+    - keypoints3d
+    # - keypoints3d_tri
+    - keypoints2d
+    - heatmap
+    - directionmap
+    - di_vectors
+    - confidences
+    # Following only for debugging
+    # - keypoints3d_combined
+    # - heatmap_fixed
+    # - directionmap_fixed
+    # - keypoints2d_fixed
+    # - keypoints2d_combined
+
+  # Corresponding to the output above, whether to calculate loss
+  # stacked means the maps are stacked up in the above order
+  BACKBONE_OUTPUT:
+    - heatmap
+    - directionmap
+    - confidences
+
+  EXTRA:
+    SIGMA: 2
+    HEATMAP_SIZE:
+      - 96
+      - 96
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS:
+      - 256
+      - 256
+      - 256
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+    NUM_LAYERS: 152
+
+  direct:
+    # For direct
+    NUM_REFINE: 2
+    # For heatmap1d
+
+  multilayer:
+    NUM_REFINE: 2
+    FREEZE_BACKBONE: True
+    LAYER_SIZE_MULTIPLIER: 1
+    CONFIDENCE: True
+
+  directionmap:
+
+  heatmap2d:
+    REG_METHOD: linear # linear or exp
+    ALPHA: 0.001
+    N_SAMPLES: 16
+    OFFSET: 0.00001
+
+  heatmap1d:
+    DENSITY_SIZE: 96
+
+  offsetmap:
+    SAMPLE_LEN: 96
+    # offsetmap type values:
+    # lambda: -1 ~ 0 ~ 1 => 0 ~ +inf ~ -inf ~ 0.
+    # mu: 0 ~ 1 => 0 ~ +inf but the vanishing point can be in the opposite direction.
+    TYPE: mu
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS: # Larget Deconvlutional layers.
+      - 512
+      - 512
+      - 512
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+
+
+TRAIN:
+  IS_PRETRAIN: True
+  BATCH_SIZE: 6
+  DATA_PARALLEL: True
+  LEARNING_RATE: 1.0e-4
+  SHUFFLE: True
+  SOFT_EP: 400 # 20^2
+  SVD_EPS: 1.0e-4
+  NUM_WORKERS: 8
+  NUM_EPOCHS: 20
+  CONTINUE: False
+  CHECKPOINT:
+  LOSS_FREQ: 20
+  VIS_FREQ: 2000
+  USE_CAMERAS:
+    - 1
+    - 2
+    - 3
+    - 4
+
+TEST:
+  WRITE_LOG: False
+  BATCH_SIZE: 1
+  SCA_STEPS: 3
+  DATA_PARALLEL: True
+  USE_GT_DATA_TYPE:
+  VIS_FREQ: 6
+  SHUFFLE: False
+  NUM_WORKERS: 8
+  USE_CAMERAS:
+    - 1
+    # - 2
+    - 3
+    # - 4

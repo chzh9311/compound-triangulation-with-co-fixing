@@ -1,0 +1,4 @@
+*.lprof
+log/**
+**/__pycache__/**
+.vscode/**
