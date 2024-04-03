@@ -99,7 +99,7 @@ MODEL:
     LAYER_SIZE_MULTIPLIER: 1
     CONFIDENCE: True
 
-  directionmap:
+  lof:
 
   heatmap2d:
     REG_METHOD: linear # linear or exp

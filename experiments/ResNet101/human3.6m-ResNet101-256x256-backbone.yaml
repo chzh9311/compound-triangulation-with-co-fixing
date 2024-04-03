@@ -40,7 +40,7 @@ MODEL:
   REQUIRED_DATA:
     - images
     - heatmap
-    # - directionmap
+    # - lof
     - joint_vis
     # - limb_vis
 
@@ -48,7 +48,7 @@ MODEL:
   # stacked means the maps are stacked up in the above order
   BACKBONE_OUTPUT:
     - heatmap
-    # - directionmap
+    # - lof
 
   EXTRA:
     SIGMA: 2

@@ -65,7 +65,7 @@ MODEL:
       - 4
     NUM_LAYERS: 152
 
-  directionmap:
+  lof:
 
 TRAIN:
   IS_PRETRAIN: True

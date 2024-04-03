@@ -51,7 +51,7 @@ MODEL:
     PTS_IMPROVE_TH: 0.25
     PTS_FIX_UB: 400
 
-  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, directionmap, keypionts3d
+  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, lof, keypionts3d
   REQUIRED_DATA:
     - images
     - keypoints3d
@@ -93,7 +93,7 @@ MODEL:
       - 4
     NUM_LAYERS: 152
 
-  directionmap:
+  lof:
 
 TRAIN:
   IS_PRETRAIN: True

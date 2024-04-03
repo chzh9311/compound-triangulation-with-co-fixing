@@ -262,7 +262,7 @@ def case_study():
         gt_kps_2d[i, ...] = (homo_kp_2d[:2, :] / homo_kp_2d[2:3, :]).T
     pred_kps_2d = model_out.keypoints2d.squeeze().detach().cpu().numpy()
     hms = model_out.heatmap.squeeze(0).detach().cpu().numpy()
-    dms = model_out.directionmap.squeeze(0).detach().cpu().numpy()
+    dms = model_out.lof.squeeze(0).detach().cpu().numpy()
     # pred_limb_labels = normalize(np.sum(dms, axis=(2, 3)), dim=1, tensor=False)
 
     # vis_idx
@@ -279,7 +279,7 @@ def case_study():
     # combined_kps_2d = model_out.keypoints2d_combined.squeeze(-1)[vis_idx, ...].detach().cpu().numpy()
     # pred_p3d = model_out.keypoints3d_combined.squeeze().detach().cpu().numpy()
     # print(np.mean(np.linalg.norm(gt_p3d - pred_p3d, axis=-1)))
-    # fixed_lb_dm = model_out.directionmap_combined[vis_idx, :, :cfg.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+    # fixed_lb_dm = model_out.lof_combined[vis_idx, :, :cfg.MODEL.NUM_BONES, ...].detach().cpu().numpy()
 
     gt_kps_2d = np.zeros((pred_kps_2d.shape[0], cfg.MODEL.NUM_JOINTS, 2))
     for i in range(gt_kps_2d.shape[0]):
@@ -288,7 +288,7 @@ def case_study():
         homo_kp_2d = P @ homo_kp_3d
         gt_kps_2d[i, ...] = (homo_kp_2d[:2, :] / homo_kp_2d[2:3, :]).T
 
-    # pred_lb_dm = model_out.directionmap[vis_idx, :, :cfg.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+    # pred_lb_dm = model_out.lof[vis_idx, :, :cfg.MODEL.NUM_BONES, ...].detach().cpu().numpy()
     # for cam_idx in range(4):
     #     pred_lb_dm_cam = np.linalg.norm(pred_lb_dm[cam_idx, ...], axis=1)
     #     pred_hm = model_out.heatmap #.view(required_data.images.shape[:2] + model_out.heatmap.shape[1:])

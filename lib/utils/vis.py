@@ -47,7 +47,7 @@ def vis_heatmap_data(image, pred_hms, gt_hms, Nj, htree, reg_method, **kwargs):
                     limb_name = htree.node_list[px]["name"] + " - " + htree.node_list[dt]["name"]
                 except IndexError:
                     limb_name = f"Undefined_{i}"
-                if reg_method in ["heatmap2d", "vanishing_map", "openpose", "directionmap"]:
+                if reg_method in ["heatmap2d", "vanishing_map", "openpose", "lof"]:
                     if "pred_limb_labels" in kwargs:
                         vec = kwargs[name+'_limb_labels'][i-1]
                         limb_name += " [" + ", ".join([f"{vec[i]:.2f}" for i in range(vec.shape[0])]) + "]"
