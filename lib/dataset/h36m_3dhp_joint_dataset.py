@@ -158,7 +158,7 @@ class MPI_INF_3DHP_train(Dataset):
                 output.append(joints_3d)
             elif out == "mu":
                 output.append(mus)
-            elif out == "directionmap":
+            elif out == "lof":
                 local_coords = joints_3d.T
                 dires = local_coords[:, LIMB_PAIRS[:, 1]] - local_coords[:, LIMB_PAIRS[:, 0]]
                 dires /= np.linalg.norm(dires, axis=0, keepdims=True)

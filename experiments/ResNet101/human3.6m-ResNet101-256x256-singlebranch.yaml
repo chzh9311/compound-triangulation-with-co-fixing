@@ -54,7 +54,7 @@ MODEL:
     - keypoints3d
     - keypoints2d
     - heatmap
-    # - directionmap
+    # - lof
     # - di_vectors
     # - confidences
 
@@ -62,7 +62,7 @@ MODEL:
   # stacked means the maps are stacked up in the above order
   BACKBONE_OUTPUT:
     - heatmap
-    # - directionmap
+    # - lof
     # - confidences
 
   EXTRA:

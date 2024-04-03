@@ -178,14 +178,14 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
                 output.append(kps_hm)
             elif out == "mu":
                 output.append(mus)
-            elif out == "directionmap":
+            elif out == "lof":
                 local_coords = retval_camera.R @ joints_3d.T + retval_camera.t
                 dires = local_coords[:, LIMB_PAIRS[:, 1]] - local_coords[:, LIMB_PAIRS[:, 0]]
                 dires /= np.linalg.norm(dires, axis=0, keepdims=True)
                 if len(self.limb_sigmas):
-                    df_hm = gaussian_direction_field(self.heatmap_shape, dires.T, bones, self.limb_sigmas)
+                    df_hm = gaussian_lof(self.heatmap_shape, dires.T, bones, self.limb_sigmas)
                 else:
-                    df_hm = gaussian_direction_field(self.heatmap_shape, dires.T, bones, [self.sigma]*LIMB_PAIRS.shape[0])
+                    df_hm = gaussian_lof(self.heatmap_shape, dires.T, bones, [self.sigma]*LIMB_PAIRS.shape[0])
                 output.append(df_hm.reshape(-1, *self.heatmap_shape))
             elif out == "densitymap2d":
                 df_hm = gaussian_density_field(self.heatmap_shape, mus, bones, self.sigma ** 2)
@@ -262,7 +262,7 @@ def generate_bone_confidence(heatmap_shape, bones, sigma):
     return multiplier
 
 
-def gaussian_direction_field(heatmap_shape, dires, bones, sigma):
+def gaussian_lof(heatmap_shape, dires, bones, sigma):
     """
     dires: n_limbs x 3
     bones: n_limbs x 2 x 2
@@ -275,7 +275,7 @@ def gaussian_direction_field(heatmap_shape, dires, bones, sigma):
     return multiplier.reshape(-1, 1, h, w) * dires.reshape(-1, 3, 1, 1)
 
 
-def generate_direction_field(heatmap_shape, dires, bones, limbw):
+def generate_lof(heatmap_shape, dires, bones, limbw):
     """
     dires: n_limbs x 3
     bones: n_limbs x 2 x 2
@@ -542,7 +542,7 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
         # mus, density_map, bvs = self.generate_gt_density(proj_matrices, keypoints, 2)
         label2value = {"images": "images", "mus": "mus", "keypoints3d": "keypoints", "projections":"proj_matrices",
                        "densitymap2d": "density_map", "bonevectors": "bvs", "intrinsics": "intrinsics",
-                       "rotation": "rotation", "directionmap": "directionmap", "identity": "data_id",
+                       "rotation": "rotation", "lof": "lof", "identity": "data_id",
                        "cam_ctr": "cam_ctr", "index": 'idx'}
         output = []
         for l in self.output_type:
@@ -550,7 +550,7 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
                 output.append(action[:-2])
             elif l == "subject":
                 output.append(subject)
-            # elif l == "directionmap":
+            # elif l == "lof":
             #     feat_strides = (bbox0[2:] - bbox0[:2]) / np.array(self.heatmap_shape)
             #     kps_in_hm = (joints_2d - bbox0[:2].reshape(1, 2)) / feat_strides.reshape(1, 2)
             #     kps_hm = generate_gaussian_target(self.heatmap_shape, kps_in_hm, self.sigma)

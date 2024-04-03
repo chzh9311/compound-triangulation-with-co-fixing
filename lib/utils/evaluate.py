@@ -23,7 +23,7 @@ def heatmap_weighted_MSE(hm1, hm2, dtype='joint', weight=None):
             # joint
             errs = 0.5 * torch.mean((hm1 - hm2)**2 * weight.view(*weight.shape, 1, 1), dim=(2, 3))
         elif dtype == 'limb':
-            # directionmap
+            # lof
             errs = 0.5 * torch.mean((hm1 - hm2).view(*weight.shape, -1, *hm1.shape[2:])**2 * weight.view(*weight.shape, 1, 1, 1), dim=(2, 3, 4))
     else:
         errs = 0.5 * torch.mean((hm1 - hm2)**2, dim=(2, 3))

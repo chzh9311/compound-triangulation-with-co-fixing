@@ -175,7 +175,7 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
                 output.append(limb_vis)
             elif out == "index":
                 output.append(idx)
-            elif out == "directionmap":
+            elif out == "lof":
                 dires = joints_3d.T[:, LIMB_PAIRS[:, 1]] - joints_3d.T[:, LIMB_PAIRS[:, 0]]
                 dires /= np.linalg.norm(dires, axis=0, keepdims=True)
                 if len(self.limb_sigmas):
@@ -320,7 +320,7 @@ class TotalCaptureMultiViewDataset(TotalCaptureBaseDataset):
         data_id = f"{'Seen' if subject in ['S1', 'S2', 'S3'] else 'Unseen'}, {self.action_names[sample[0]['action']-1]}{sample[0]['subaction']}"
 
         label2value = {"images": "images", "keypoints3d": "keypoints", "projections":"proj_matrices",
-                       "intrinsics": "intrinsics", "rotation": "rotation", "directionmap": "directionmap",
+                       "intrinsics": "intrinsics", "rotation": "rotation", "lof": "lof",
                        "identity": "data_id", "limb_vis": "limb_vis", "cam_ctr":"cam_ctr", "index": "idx",
                        "subject": "subject"}
         output = []

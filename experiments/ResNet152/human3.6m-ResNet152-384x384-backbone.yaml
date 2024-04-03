@@ -26,7 +26,7 @@ MODEL:
   # 3. 'heatmap1d' means output 1d heatmap and regress.
   # 4. 'offsetmap' refers to vector field that points to the vanishing point.
   # None for pure joint estimations.
-  DENSITY_REG_METHOD: directionmap
+  DENSITY_REG_METHOD: lof
   NUM_DIMS: 3
 
   FUSION_STRATEGY: maha
@@ -40,7 +40,7 @@ MODEL:
   REQUIRED_DATA:
     - images
     - heatmap
-    - directionmap
+    - lof
     - joint_vis
     - limb_vis
 
@@ -48,7 +48,7 @@ MODEL:
   # stacked means the maps are stacked up in the above order
   BACKBONE_OUTPUT:
     - heatmap
-    - directionmap
+    - lof
 
   EXTRA:
     SIGMA: 2
@@ -71,7 +71,7 @@ MODEL:
   heatmap_sample:
     SAMPLE_LEVEL: 2
 
-  directionmap:
+  lof:
 
 TRAIN:
   IS_PRETRAIN: True

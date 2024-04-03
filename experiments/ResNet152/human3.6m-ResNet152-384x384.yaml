@@ -50,7 +50,7 @@ MODEL:
 
   BACKBONE: ResNet
 
-  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, directionmap, keypionts3d
+  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, lof, keypionts3d
   REQUIRED_DATA:
     - images
     - keypoints3d
@@ -67,13 +67,13 @@ MODEL:
     # - keypoints3d_tri
     - keypoints2d
     - heatmap
-    - directionmap
+    - lof
     - di_vectors
     - confidences
     # Following only for debugging
     # - keypoints3d_combined
     # - heatmap_fixed
-    # - directionmap_fixed
+    # - lof_fixed
     # - keypoints2d_fixed
     # - keypoints2d_combined
 
@@ -81,7 +81,7 @@ MODEL:
   # stacked means the maps are stacked up in the above order
   BACKBONE_OUTPUT:
     - heatmap
-    - directionmap
+    - lof
     - confidences
 
   EXTRA:
@@ -113,7 +113,7 @@ MODEL:
     LAYER_SIZE_MULTIPLIER: 1
     CONFIDENCE: True
 
-  directionmap:
+  lof:
 
   heatmap2d:
     REG_METHOD: linear # linear or exp

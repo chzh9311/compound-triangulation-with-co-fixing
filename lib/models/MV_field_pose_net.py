@@ -77,8 +77,8 @@ class MultiViewFPNet(nn.Module):
             out_values[k] = backbone_out[i] if len(self.backbone_out_label) > 1 else backbone_out
         if "heatmap" in out_values:
             out_values.heatmap = out_values.heatmap.view(batch_size, n_views, self.num_joints, *out_values.heatmap.shape[-2:])
-        if "directionmap" in out_values:
-            out_values.directionmap = out_values.directionmap
+        if "lof" in out_values:
+            out_values.lof = out_values.lof
         heatmaps = out_values.heatmap
         Nj, Nb = self.num_joints, self.num_bones
 
@@ -93,7 +93,7 @@ class MultiViewFPNet(nn.Module):
                 # w_joints = out_values.confidences[:, :, Nb:] / torch.sum(out_values.confidences[:, :, Nb:], dim=(1, 2), keepdim=True)
                 # out_values.confidences = torch.cat((w_limbs, w_joints), dim=2)
         else:
-            if "directionmap" in out_values:
+            if "lof" in out_values:
                 out_values.confidences = torch.ones(batch_size, n_views, Nj + Nb, device=device) / n_views
             else:
                 out_values.confidences = torch.ones(batch_size, n_views, Nj, device=device) / n_views
@@ -107,7 +107,7 @@ class MultiViewFPNet(nn.Module):
         out_values.keypoints2d = kps
         if not self.use_gt:
             if fix_heatmap:
-                di_maps = out_values.directionmap.view(batch_size, n_views, Nb, self.field_dim, h, w)
+                di_maps = out_values.lof.view(batch_size, n_views, Nb, self.field_dim, h, w)
                 kps_combined, di_combined, limb_kps_combined, dm_fixed, hm_fixed = self.fusion_layer(
                     heatmaps, di_maps, proj_mats, rotation, camctr, images_shape[3:], out_values.confidences,
                     *self.fix_ths)
@@ -119,7 +119,7 @@ class MultiViewFPNet(nn.Module):
 
         if self.use_lof:
             limb_pairs = np.array(htree.limb_pairs)
-            di_maps = out_values.directionmap.view(batch_size, n_views, Nb, self.field_dim, h, w)
+            di_maps = out_values.lof.view(batch_size, n_views, Nb, self.field_dim, h, w)
             di = calc_avg_direction(kps_in_hm, di_maps, limb_pairs, -1)
             out_values.di_vectors = di
             norm_maps = torch.norm(di_maps, dim=3)
@@ -141,8 +141,8 @@ class MultiViewFPNet(nn.Module):
             #     out_values.lines_tri = kps_3d[2]
 
         for k in self.model_out_label:
-            if k == "directionmap":
-                model_out.append(out_values[k].view(batch_size, n_views, self.num_bones, self.field_dim, *out_values.directionmap.shape[-2:]))
+            if k == "lof":
+                model_out.append(out_values[k].view(batch_size, n_views, self.num_bones, self.field_dim, *out_values.lof.shape[-2:]))
             elif k == "keypoints3d":
                 pass
             elif k == "keypoints3d_tri":

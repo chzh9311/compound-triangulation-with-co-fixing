@@ -32,6 +32,7 @@ from lib.dataset.human36m import Human36MMonocularFeatureMapDataset
 from lib.dataset.h36m_3dhp_joint_dataset import MPI_INF_3DHP_train, H36M3DHPJointDataset
 from lib.dataset.totalcapture import TotalCaptureMonocularFeatureMapDataset
 from lib.models.field_pose_net import get_FPNet
+from lib.models.ditehrnet import DiteHRNet
 from lib.utils.DictTree import create_human_tree
 from lib.utils.functions import fit_1d_density, calc_vanish, calc_vanish_from_vmap, normalize
 from lib.utils.evaluate import heatmap_MSE, heatmap_weighted_MSE, vector_error, heatmap_norm_max_dist, dire_map_error, dire_map_angle_err
@@ -70,8 +71,8 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
             preds[out] = model_out[out]
             if out == 'heatmap':
                 losses[out] = loss_fns[out](preds[out], required_data[out], 'joint', required_data['joint_vis'])
-            elif out == 'directionmap':
-                losses[out] = loss_fns['directionmap'](preds[out], required_data[out], 'limb', required_data['limb_vis'])
+            elif out == 'lof':
+                losses[out] = loss_fns['lof'](preds[out], required_data[out], 'limb', required_data['limb_vis'])
 
         loss = sum([v for v in losses.values()])
 
@@ -108,13 +109,13 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
             pred_hm = model_out.heatmap[vis_idx, ...].detach().cpu().numpy()
             gt_hm = required_data.heatmap[vis_idx, ...].detach().cpu().numpy()
 
-            if "directionmap" in out_labels:
-                bs, _, h, w = required_data.directionmap.shape
+            if "lof" in out_labels:
+                bs, _, h, w = required_data.lof.shape
                 ndim = config.MODEL.NUM_DIMS
-                pred_lb_dm = model_out.directionmap[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
+                pred_lb_dm = model_out.lof[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
                 pred_limb_labels = normalize(np.sum(pred_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                 pred_lb_dm = np.linalg.norm(pred_lb_dm, axis=1)
-                gt_lb_dm = required_data.directionmap[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
+                gt_lb_dm = required_data.lof[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
                 gt_limb_labels = normalize(np.sum(gt_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                 gt_lb_dm = np.linalg.norm(gt_lb_dm, axis=1)
                 pred_hm = np.concatenate((pred_hm, pred_lb_dm), axis=0)
@@ -168,11 +169,11 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
             for k in losses.keys():
                 if k == "heatmap":
                     losses[k] += loss_fns[k](preds[k][:, :cfg.MODEL.NUM_JOINTS, ...], required_data[k], required_data.joint_vis).item() * preds[k].shape[0]
-                elif k == "directionmap":
-                    bs, _, h, w = required_data.directionmap.shape
+                elif k == "lof":
+                    bs, _, h, w = required_data.lof.shape
                     ndim = config.MODEL.NUM_DIMS
-                    required_data.directionmap = required_data.directionmap.view(bs, config.MODEL.NUM_BONES, ndim, h, w)
-                    losses[k] += loss_fns[k](preds[k][:, :cfg.MODEL.NUM_BONES*ndim, ...].view(*required_data.directionmap.shape), required_data[k], required_data.limb_vis).item() * preds[k].shape[0]
+                    required_data.lof = required_data.lof.view(bs, config.MODEL.NUM_BONES, ndim, h, w)
+                    losses[k] += loss_fns[k](preds[k][:, :cfg.MODEL.NUM_BONES*ndim, ...].view(*required_data.lof.shape), required_data[k], required_data.limb_vis).item() * preds[k].shape[0]
                     if not (losses[k] > 0):
                         print("nan")
 
@@ -185,12 +186,12 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
                 pred_hm = model_out.heatmap.squeeze()[vis_idx, ...].detach().cpu().numpy()
                 gt_hm = required_data.heatmap[vis_idx, ...].detach().cpu().numpy()
 
-                if "directionmap" in out_labels:
-                    bs, Nb, _, h, w = required_data.directionmap.shape
-                    pred_lb_dm = model_out.directionmap[vis_idx, :config.MODEL.NUM_BONES*ndim, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
+                if "lof" in out_labels:
+                    bs, Nb, _, h, w = required_data.lof.shape
+                    pred_lb_dm = model_out.lof[vis_idx, :config.MODEL.NUM_BONES*ndim, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
                     pred_limb_labels = normalize(np.sum(pred_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                     pred_lb_dm = np.linalg.norm(pred_lb_dm, axis=1)
-                    gt_lb_dm = required_data.directionmap[vis_idx, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
+                    gt_lb_dm = required_data.lof[vis_idx, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
                     gt_limb_labels = normalize(np.sum(gt_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                     gt_lb_dm = np.linalg.norm(gt_lb_dm, axis=1)
                     pred_hm = np.concatenate((pred_hm, pred_lb_dm), axis=0)
@@ -379,8 +380,8 @@ def train(cfg, debug=False):
 
     # Start epochs
     l1loss = nn.L1Loss(reduction='mean')
-    train_loss_fns = edict({"heatmap": heatmap_weighted_MSE, "directionmap": heatmap_weighted_MSE})
-    test_loss_fns = edict({"heatmap": heatmap_norm_max_dist, "mu": l1loss, "vector": vector_error, "directionmap": dire_map_angle_err})
+    train_loss_fns = edict({"heatmap": heatmap_weighted_MSE, "lof": heatmap_weighted_MSE})
+    test_loss_fns = edict({"heatmap": heatmap_norm_max_dist, "mu": l1loss, "vector": vector_error, "lof": dire_map_angle_err})
     dnum = len(train_set)
 
     for epoch in range(start_epoch, cfg.TRAIN.NUM_EPOCHS):
@@ -544,7 +545,7 @@ def test(cfg):
 
     # Loss function
     l1loss = nn.L1Loss(reduction='mean')
-    test_loss_fns = edict({"heatmap": heatmap_norm_max_dist, "scalar": l1loss, "vector": vector_error, "directionmap": dire_map_angle_err})
+    test_loss_fns = edict({"heatmap": heatmap_norm_max_dist, "scalar": l1loss, "vector": vector_error, "lof": dire_map_angle_err})
 
     logger.info("Start testing...")
     current_loss = test_one_epoch(0, cfg, test_loader, model, test_loss_fns, htree, writer, logger)

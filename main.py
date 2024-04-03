@@ -69,11 +69,11 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         # heatmaps, pred_kps_2d, pred_kps_3d, pred_mus = model(images, projections, human_tree, intrinsics)
         # loss = torch.mean(loss_fn(pred_kps_3d, gt_kps_3d))
         losses["keypoints3d"] = loss_fns.coordinate(model_out.keypoints3d, required_data.keypoints3d, config.TRAIN.SOFT_EP)
-        if "directionmap" in model_out:
+        if "lof" in model_out:
             gt_vecs = gt_kps_3d[:, human_tree.limb_pairs[:, 1], :] - gt_kps_3d[:, human_tree.limb_pairs[:, 0], :]
             local_gt_vecs = gt_vecs.reshape(gt_kps_3d.shape[0], 1, config.MODEL.NUM_BONES, 3) @ required_data.rotation.transpose(-1, -2)
-            di_loss = loss_fns.di_map(local_gt_vecs[:, :, :, :config.MODEL.NUM_DIMS], model_out.directionmap, required_data.limb_vis)
-            losses["directionmap"] = 1000 * di_loss
+            di_loss = loss_fns.di_map(local_gt_vecs[:, :, :, :config.MODEL.NUM_DIMS], model_out.lof, required_data.limb_vis)
+            losses["lof"] = 1000 * di_loss
         if "keypoints3d_tri" in model_out:
             losses["keypoints3d_tri"] = loss_fns.coordinate(model_out.keypoints3d_tri, required_data.keypoints3d, config.TRAIN.SOFT_EP)
         if "lines_tri" in model_out:
@@ -85,7 +85,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         # else:
         #     loss = kp_loss
         loss = sum(losses.values())
-        # loss = losses["keypoints3d"] + losses["directionmap"]
+        # loss = losses["keypoints3d"] + losses["lof"]
         losses["total"] = loss
 
         if torch.isnan(loss):
@@ -145,8 +145,8 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
                 global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
             )
 
-            if "directionmap" in model_out:
-                pred_lb_dm = model_out.directionmap[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+            if "lof" in model_out:
+                pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
                 # writer.add_figure(
                 #     "Training vis - vectors",
                 #     draw_di_vec_on_image(images, pred_lb_dm),
@@ -228,7 +228,7 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                 
             model_out = edict()
             model_out_labels = config.MODEL.MODEL_OUTPUT + ["keypoints2d_combined", "keypoints3d_combined",
-                                                            "directionmap_fixed", "heatmap_fixed"] * config.MODEL.CO_FIXING.FIX_HEATMAP
+                                                            "lof_fixed", "heatmap_fixed"] * config.MODEL.CO_FIXING.FIX_HEATMAP
             for i, k in enumerate(model_out_labels):
                 model_out[k] = out_values[i]
 
@@ -325,8 +325,8 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                         homo_kp_2d = P @ homo_kp_3d
                         gt_kps_2d[i, ...] = (homo_kp_2d[:2, :] / homo_kp_2d[2:3, :]).T
 
-                    if "directionmap" in model_out:
-                        pred_lb_dm = model_out.directionmap[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+                    if "lof" in model_out:
+                        pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
                         cam_idx = np.random.randint(0, nv)
                         pred_lb_dm_cam = np.linalg.norm(pred_lb_dm[cam_idx, ...], axis=1)
                         pred_hm = model_out.heatmap #.view(required_data.images.shape[:2] + model_out.heatmap.shape[1:])
@@ -352,7 +352,7 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                         )
 
                     # writer.add_figure(
-                    #     "directionmap",
+                    #     "lof",
                     #     vis_heatmap_data(images[0], pred_hm, gt_hm, 17, human_tree, "heatmap2d", pred_limb_labels=pred_limb_labels, gt_limb_labels=gt_limb_labels),
                     #     global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
                     # )

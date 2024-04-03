@@ -24,22 +24,22 @@ MODEL:
   # 3. 'heatmap1d' means output 1d heatmap and regress.
   # 4. 'offsetmap' refers to vector field that points to the vanishing point.
   # None for pure joint estimations.
-  DENSITY_REG_METHOD: directionmap
+  DENSITY_REG_METHOD: lof
   USE_CONFIDENCE: False
 
   BACKBONE: ResNet
 
-  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, directionmap
+  # output choices: heatmap, keypoints2d, keypoints2d_inhm densitymap2d, densitymap1d, mu, offsetmap, lof
   REQUIRED_DATA:
     - images
     - heatmap
-    - directionmap
+    - lof
 
   # Corresponding to the output above, whether to calculate loss
   # stacked means the maps are stacked up in the above order
   BACKBONE_OUTPUT:
     - heatmap
-    - directionmap
+    - lof
 
   EXTRA:
     SIGMA: 2
@@ -103,7 +103,7 @@ MODEL:
       - 4
       - 4
 
-  directionmap:
+  lof:
 
 TRAIN:
   IS_PRETRAIN: True
