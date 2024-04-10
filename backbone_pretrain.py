@@ -28,13 +28,11 @@ from easydict import EasyDict as edict
 from collections import OrderedDict
 from argparse import ArgumentParser
 
-from lib.dataset.human36m import Human36MMonocularFeatureMapDataset
-from lib.dataset.h36m_3dhp_joint_dataset import MPI_INF_3DHP_train, H36M3DHPJointDataset
-from lib.dataset.totalcapture import TotalCaptureMonocularFeatureMapDataset
+from lib.dataset.joint import build_2D_dataset
 from lib.models.field_pose_net import get_FPNet
-from lib.models.ditehrnet import DiteHRNet
+# from lib.models.ditehrnet import DiteHRNet
 from lib.utils.DictTree import create_human_tree
-from lib.utils.functions import fit_1d_density, calc_vanish, calc_vanish_from_vmap, normalize
+from lib.utils.functions import fit_1d_density, calc_vanish, calc_vanish_from_vmap, normalize, collate_pose
 from lib.utils.evaluate import heatmap_MSE, heatmap_weighted_MSE, vector_error, heatmap_norm_max_dist, dire_map_error, dire_map_angle_err
 from lib.utils.utils import make_logger, time_to_string
 from lib.utils.vis import vis_heatmap_data, vis_specific_vector_field
@@ -52,10 +50,6 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
     required = config.MODEL.REQUIRED_DATA.copy()
     out_labels = config.MODEL.BACKBONE_OUTPUT
 
-    if config.DATASET.NAME == "joint":
-        required.append("data_label")
-
-    Nj, Nb = config.MODEL.NUM_JOINTS, config.MODEL.NUM_BONES
     for batch_i, data in enumerate(dataloader):
         required_data = edict()
         model_out = edict()
@@ -67,6 +61,13 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
         losses = edict()
         for i, k in enumerate(out_labels):
             model_out[k] = out_values[i] if len(out_labels) > 1 else out_values
+        if config.DATASET.NAME == "joint":
+            data_ids = required_data.data_label.view(-1, 1, 1, 1)
+            model_out['heatmap'] = data_ids * model_out['heatmap'][:, :config.MODEL.NUM_JOINTS1]\
+                                   + (1 - data_ids) * model_out['heatmap'][:, config.MODEL.NUM_JOINTS1:]
+            if 'lof' in out_labels:
+                model_out['lof'] = data_ids * model_out['lof'][:, :3 * config.MODEL.NUM_LIMBS1]\
+                                   + (1 - data_ids) * model_out['lof'][:, 3 * config.MODEL.NUM_LIMBS1:]
         for out in model_out:
             preds[out] = model_out[out]
             if out == 'heatmap':
@@ -108,14 +109,15 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
 
             pred_hm = model_out.heatmap[vis_idx, ...].detach().cpu().numpy()
             gt_hm = required_data.heatmap[vis_idx, ...].detach().cpu().numpy()
+            Nj = pred_hm.shape[0]
 
             if "lof" in out_labels:
                 bs, _, h, w = required_data.lof.shape
                 ndim = config.MODEL.NUM_DIMS
-                pred_lb_dm = model_out.lof[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
+                pred_lb_dm = model_out.lof[vis_idx, ...].view(-1, ndim, h, w).detach().cpu().numpy()
                 pred_limb_labels = normalize(np.sum(pred_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                 pred_lb_dm = np.linalg.norm(pred_lb_dm, axis=1)
-                gt_lb_dm = required_data.lof[vis_idx, ...].view(Nb, ndim, h, w).detach().cpu().numpy()
+                gt_lb_dm = required_data.lof[vis_idx, ...].view(-1, ndim, h, w).detach().cpu().numpy()
                 gt_limb_labels = normalize(np.sum(gt_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                 gt_lb_dm = np.linalg.norm(gt_lb_dm, axis=1)
                 pred_hm = np.concatenate((pred_hm, pred_lb_dm), axis=0)
@@ -123,13 +125,13 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
 
                 writer.add_figure(
                     "training vis",
-                    vis_heatmap_data(image, pred_hm, gt_hm, cfg.MODEL.NUM_JOINTS, htree, use_lof, pred_limb_labels=pred_limb_labels, gt_limb_labels=gt_limb_labels),
+                    vis_heatmap_data(image, pred_hm, gt_hm, Nj, htree, use_lof, pred_limb_labels=pred_limb_labels, gt_limb_labels=gt_limb_labels),
                     global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
                 )
             else:
                 writer.add_figure(
                     "training vis",
-                    vis_heatmap_data(image, pred_hm, gt_hm, cfg.MODEL.NUM_JOINTS, htree, use_lof),
+                    vis_heatmap_data(image, pred_hm, gt_hm, Nj, htree, use_lof),
                     global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
                 )
 
@@ -164,6 +166,13 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
             preds = edict()
             for i, k in enumerate(out_labels):
                 model_out[k] = out_values[i] if len(out_labels) > 1 else out_values
+            if config.DATASET.NAME == "joint":
+                data_ids = required_data.data_label.view(-1, 1, 1, 1)
+                model_out['heatmap'] = data_ids * model_out['heatmap'][:, :config.MODEL.NUM_JOINTS1]\
+                                       + (1 - data_ids) * model_out['heatmap'][:, config.MODEL.NUM_JOINTS1:]
+                if 'lof' in out_labels:
+                    model_out['lof'] = data_ids * model_out['lof'][:, :3 * config.MODEL.NUM_LIMBS1]\
+                                       + (1 - data_ids) * model_out['lof'][:, 3 * config.MODEL.NUM_LIMBS1:]
             for out in model_out:
                 preds[out] = model_out[out]
             for k in losses.keys():
@@ -172,8 +181,8 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
                 elif k == "lof":
                     bs, _, h, w = required_data.lof.shape
                     ndim = config.MODEL.NUM_DIMS
-                    required_data.lof = required_data.lof.view(bs, config.MODEL.NUM_BONES, ndim, h, w)
-                    losses[k] += loss_fns[k](preds[k][:, :cfg.MODEL.NUM_BONES*ndim, ...].view(*required_data.lof.shape), required_data[k], required_data.limb_vis).item() * preds[k].shape[0]
+                    required_data.lof = required_data.lof.view(bs, -1, ndim, h, w)
+                    losses[k] += loss_fns[k](preds[k][:, :cfg.MODEL.NUM_LIMBS*ndim, ...].view(*required_data.lof.shape), required_data[k], required_data.limb_vis).item() * preds[k].shape[0]
                     if not (losses[k] > 0):
                         print("nan")
 
@@ -185,13 +194,14 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
 
                 pred_hm = model_out.heatmap.squeeze()[vis_idx, ...].detach().cpu().numpy()
                 gt_hm = required_data.heatmap[vis_idx, ...].detach().cpu().numpy()
+                Nj = pred_hm.shape[0]
 
                 if "lof" in out_labels:
                     bs, Nb, _, h, w = required_data.lof.shape
-                    pred_lb_dm = model_out.lof[vis_idx, :config.MODEL.NUM_BONES*ndim, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
+                    pred_lb_dm = model_out.lof[vis_idx, ...].view(-1, ndim, h, w).detach().cpu().numpy()
                     pred_limb_labels = normalize(np.sum(pred_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                     pred_lb_dm = np.linalg.norm(pred_lb_dm, axis=1)
-                    gt_lb_dm = required_data.lof[vis_idx, ...].view(config.MODEL.NUM_BONES, ndim, h, w).detach().cpu().numpy()
+                    gt_lb_dm = required_data.lof[vis_idx, ...].view(-1, ndim, h, w).detach().cpu().numpy()
                     gt_limb_labels = normalize(np.sum(gt_lb_dm, axis=(2, 3)), dim=1, tensor=False)
                     gt_lb_dm = np.linalg.norm(gt_lb_dm, axis=1)
                     pred_hm = np.concatenate((pred_hm, pred_lb_dm), axis=0)
@@ -199,13 +209,13 @@ def test_one_epoch(epoch, config, dataloader, model, loss_fns, htree, writer, lo
 
                     writer.add_figure(
                         "Testing vis",
-                        vis_heatmap_data(image, pred_hm, gt_hm, cfg.MODEL.NUM_JOINTS, htree, use_lof, pred_limb_labels=pred_limb_labels, gt_limb_labels=gt_limb_labels),
+                        vis_heatmap_data(image, pred_hm, gt_hm, Nj, htree, use_lof, pred_limb_labels=pred_limb_labels, gt_limb_labels=gt_limb_labels),
                         global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
                     )
 
                 writer.add_figure(
                     "Testing vis",
-                    vis_heatmap_data(image, pred_hm, gt_hm, cfg.MODEL.NUM_JOINTS, htree, use_lof),
+                    vis_heatmap_data(image, pred_hm, gt_hm, Nj, htree, use_lof),
                     global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
                 )
 
@@ -231,99 +241,21 @@ def train(cfg, debug=False):
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])
-    if cfg.DATASET.NAME == 'totalcapture':
-        train_set = TotalCaptureMonocularFeatureMapDataset(
-            root_dir=cfg.DATASET.TC_ROOT,
-            label_dir=cfg.DATASET.TC_LABELS,
-            sigma=cfg.MODEL.EXTRA.SIGMA,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-            feature_dim=cfg.MODEL.NUM_DIMS,
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            is_train=True,
-            use_cameras=cfg.TRAIN.USE_CAMERAS,
-            transform=transform,
-            refine_indicator=cfg.TRAIN.REFINE_INDICATOR,
-            crop=True
-        )
-
-        test_set = TotalCaptureMonocularFeatureMapDataset(
-            root_dir=cfg.DATASET.TC_ROOT,
-            label_dir=cfg.DATASET.TC_LABELS,
-            sigma=cfg.MODEL.EXTRA.SIGMA,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            feature_dim=cfg.MODEL.NUM_DIMS,
-            is_train=False,
-            use_cameras=cfg.TEST.USE_CAMERAS,
-            frame_sample_rate=cfg.TEST.FRAME_SAMPLE_RATE,
-            transform=transform,
-            refine_indicator=cfg.TEST.REFINE_INDICATOR,
-            crop=True
-        )
-
-    else:
-        if cfg.DATASET.NAME == "human3.6m":
-            train_set = Human36MMonocularFeatureMapDataset(
-                root_dir=cfg.DATASET.H36M_ROOT,
-                label_dir=cfg.DATASET.H36M_MONOLABELS,
-                sigma=cfg.MODEL.EXTRA.SIGMA,
-                image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-                heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-                output_type=cfg.MODEL.REQUIRED_DATA,
-                is_train=True,
-                transform=transform,
-                crop=True
-            )
-        elif cfg.DATASET.NAME == "mpi3d":
-            train_set = MPI_INF_3DHP_train(
-                root_dir=cfg.DATASET.MPI3D_ROOT,
-                calib_dir=cfg.DATASET.MPI3D_CALIB,
-                sigma=cfg.MODEL.EXTRA.SIGMA,
-                image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-                heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-                output_type=cfg.MODEL.REQUIRED_DATA,
-                transform=transform,
-                crop=True
-            )
-        elif cfg.DATASET.NAME == "joint":
-            train_set = H36M3DHPJointDataset(
-                h36m_root_dir=cfg.DATASET.H36M_ROOT,
-                h36m_label_dir=cfg.DATASET.H36M_MONOLABELS,
-                mpi3d_root_dir=cfg.DATASET.MPI3D_ROOT,
-                mpi3d_calib_dir=cfg.DATASET.MPI3D_CALIB,
-                sigma=cfg.MODEL.EXTRA.SIGMA,
-                image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-                heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-                output_type=cfg.MODEL.REQUIRED_DATA,
-                is_train=True,
-                transform=transform,
-                crop=True
-            )
-    
-        test_set = Human36MMonocularFeatureMapDataset(
-            root_dir=cfg.DATASET.H36M_ROOT,
-            label_dir=cfg.DATASET.H36M_MONOLABELS,
-            sigma=cfg.MODEL.EXTRA.SIGMA,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            is_train=False,
-            transform=transform,
-            crop=True
-        )
+    train_set = build_2D_dataset(cfg, transform, True, True)
+    test_set = build_2D_dataset(cfg, transform, False, True)
 
     train_loader = DataLoader(
         dataset=train_set,
         batch_size=cfg.TRAIN.BATCH_SIZE,
         shuffle=cfg.TRAIN.SHUFFLE,
+        collate_fn=collate_pose,
         num_workers=cfg.TRAIN.NUM_WORKERS
     )
     test_loader = DataLoader(
         dataset=test_set,
         batch_size=cfg.TEST.BATCH_SIZE,
         shuffle=cfg.TEST.SHUFFLE,
+        collate_fn=collate_pose,
         num_workers=cfg.TEST.NUM_WORKERS
     )
 
@@ -331,14 +263,18 @@ def train(cfg, debug=False):
     exp_path = os.path.join("./log", "backbone", exp_name)
     os.mkdir(exp_path)
     logger = make_logger(name=exp_name, filename=os.path.join(exp_path, "experiment.log"), level=logging.INFO)
+    if cfg.DATASET.NAME == "joint":
+        cfg.MODEL.NUM_JOINTS = cfg.MODEL.NUM_JOINTS1 + cfg.MODEL.NUM_JOINTS2
+        cfg.MODEL.NUM_LIMBS = cfg.MODEL.NUM_LIMBS1 + cfg.MODEL.NUM_LIMBS2
+        cfg.MODEL.REQUIRED_DATA.append("data_label")
     model = get_FPNet(cfg, is_train=True, pretrain=True)
 
     logger.info("Finished loading data.")
     logger.info(f"Using {device} device.")
 
-    if torch.cuda.device_count() > 1 and cfg.TRAIN.DATA_PARALLEL:
-        logger.info(f"Using {torch.cuda.device_count()} GPUs.")
-        model = nn.DataParallel(model)
+    if len(cfg.GPUS) > 1 and cfg.TRAIN.DATA_PARALLEL:
+        logger.info(f"Using {len(cfg.GPUS)} GPUs.")
+        model = nn.DataParallel(model, cfg.GPUS)
     model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.TRAIN.LEARNING_RATE)
@@ -431,6 +367,7 @@ def train(cfg, debug=False):
                     dataset=train_set,
                     batch_size=cfg.TRAIN.BATCH_SIZE,
                     shuffle=cfg.TRAIN.SHUFFLE,
+                    collate_fn=collate_pose,
                     num_workers=cfg.TRAIN.NUM_WORKERS
                 )
 
@@ -469,41 +406,13 @@ def test(cfg):
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])
+    test_set = build_2D_dataset(cfg, transform, False, True)
 
-    if cfg.DATASET.NAME == 'totalcapture':
-        test_set = TotalCaptureMonocularFeatureMapDataset(
-            root_dir=cfg.DATASET.TC_ROOT,
-            label_dir=cfg.DATASET.TC_LABELS,
-            sigma=cfg.MODEL.EXTRA.SIGMA,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            feature_dim=cfg.MODEL.NUM_DIMS,
-            is_train=False,
-            use_cameras=cfg.TEST.USE_CAMERAS,
-            frame_sample_rate=cfg.TEST.FRAME_SAMPLE_RATE,
-            transform=transform,
-            crop=True
-        )
-    elif cfg.DATASET.NAME == 'h36m':
-        test_set = Human36MMonocularFeatureMapDataset(
-            root_dir=cfg.DATASET.H36M_ROOT,
-            label_dir=cfg.DATASET.H36M_MONOLABELS,
-            sigma=cfg.MODEL.EXTRA.SIGMA,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            is_train=False,
-            transform=transform,
-            crop=True
-        )
-    else:
-        print(f"Dataset {cfg.DATASET.NAME} does not exists.")
-        exit(-1)
     test_loader = DataLoader(
         dataset=test_set,
         batch_size=cfg.TEST.BATCH_SIZE,
         shuffle=cfg.TEST.SHUFFLE,
+        collate_fn=collate_pose,
         num_workers=cfg.TEST.NUM_WORKERS
     )
 
@@ -514,11 +423,15 @@ def test(cfg):
 
     logger.info("Finished loading data.")
     logger.info(f"Using {device} device.")
-    model = get_FPNet(cfg, is_train=True, pretrain=True)
+    if cfg.DATASET.NAME == "joint":
+        cfg.MODEL.NUM_JOINTS = cfg.MODEL.NUM_JOINTS1 + cfg.MODEL.NUM_JOINTS2
+        cfg.MODEL.NUM_LIMBS = cfg.MODEL.NUM_LIMBS1 + cfg.MODEL.NUM_LIMBS2
+        cfg.MODEL.REQUIRED_DATA.append("data_label")
+    model = get_FPNet(cfg, is_train=False, pretrain=True)
 
-    if torch.cuda.device_count() > 1:
-        logger.info(f"Using {torch.cuda.device_count()} GPUs.")
-        model = nn.DataParallel(model)
+    if len(cfg.GPUS) > 1 and cfg.TEST.DATA_PARALLEL:
+        logger.info(f"Using {len(cfg.GPUS)} GPUs.")
+        model = nn.DataParallel(model, cfg.GPUS)
     model.to(device)
 
     htree = create_human_tree()
@@ -551,21 +464,6 @@ def test(cfg):
     current_loss = test_one_epoch(0, cfg, test_loader, model, test_loss_fns, htree, writer, logger)
     if writer is not None:
         writer.close()
-
-
-# def model_struct(dump=True):
-#     file_path = 'model.onnx'
-#     if dump:
-#         cfg = get_config("human3.6m-ResNet152-384x384-backbone")
-#         model = get_FPNet(cfg, is_train=True, pretrain=True)
-#         data = torch.randn(16, 3, 256, 256)
-#         torch.onnx.export(
-#             model, data, file_path, export_params=True, opset_version=11
-#         )
-#         onnx_model = onnx.load(file_path)
-#         onnx.save(onnx.shape_inference.infer_shapes(onnx_model), file_path)
-
-#     netron.start(file_path)
 
 
 if __name__ == "__main__":

@@ -128,7 +128,8 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
 
         # load image
         image_path = os.path.join(
-            self.root_dir, subject, action, 'imageSequence' + '-undistorted' * self.undistort,
+            self.root_dir, 'processed', '_undistorted' * self.undistort, subject,
+            action, 'imageSequence' + '-undistorted'*self.undistort,
             camera_name, 'img_%06d.jpg' % (frame_idx+1))
         assert os.path.isfile(image_path), '%s doesn\'t exist' % image_path
         image = cv2.imread(image_path)
@@ -163,8 +164,6 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
         kps_in_hm = (joints_2d - bbox0[:2].reshape(1, 2)) / feat_strides.reshape(1, 2)
         kps_hm = generate_gaussian_target(self.heatmap_shape, kps_in_hm, self.sigma)
 
-        depths = (np.concatenate((joints_3d, np.ones((17, 1))), axis=1) @ retval_camera.projection[2:3, :].T).squeeze()
-        mus = depths[LIMB_PAIRS[:, 1]] / depths[LIMB_PAIRS[:, 0]]
         bones = kps_in_hm[LIMB_PAIRS, :]
         output = []
         for out in self.output_type:
@@ -176,8 +175,6 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
                 output.append(kps_in_hm)
             elif out == "heatmap":
                 output.append(kps_hm)
-            elif out == "mu":
-                output.append(mus)
             elif out == "lof":
                 local_coords = retval_camera.R @ joints_3d.T + retval_camera.t
                 dires = local_coords[:, LIMB_PAIRS[:, 1]] - local_coords[:, LIMB_PAIRS[:, 0]]
@@ -197,17 +194,6 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
                 output.append(np.ones(joints_2d.shape[0]))
             elif out == "limb_vis":
                 output.append(np.ones(joints_2d.shape[0]-1))
-            # elif out == "vanishingmap":
-            #     vanishing_map, vanishing_pts = generate_vanishing_map(
-            #         self.heatmap_shape, mus, bones, self.density_config.L, self.density_config.FIT_METHOD, self.sigma)
-            #     gt_hm = np.concatenate((kps_hm, vanishing_map), axis=0)
-            #     output.append(gt_hm)
-            # elif out == "densitymap_new_weak":
-            #     new_df = generate_new_density_field(self.heatmap_shape, dires.T, bones, retval_camera.K, self.sigma, True)
-            #     output.append(new_df)
-            # elif out == "densitymap_new":
-            #     new_df = generate_new_density_field(self.heatmap_shape, dires.T, bones, retval_camera.K, self.sigma, False)
-            #     output.append(new_df)
 
         return output
 

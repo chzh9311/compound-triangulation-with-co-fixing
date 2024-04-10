@@ -11,7 +11,7 @@ import seaborn as sns
 import random
 
 
-def vis_heatmap_data(image, pred_hms, gt_hms, Nj, htree, reg_method, **kwargs):
+def vis_heatmap_data(image, pred_hms, gt_hms, Nj, htree, use_lof, **kwargs):
     """
     Paint keypoints and density fields on image. The overall API
     image: h x w x c
@@ -22,7 +22,7 @@ def vis_heatmap_data(image, pred_hms, gt_hms, Nj, htree, reg_method, **kwargs):
         vis_list = ["pred", "gt"]
     else:
         vis_list = ["pred"]
-    cols = len(vis_list) * (2 if reg_method else 1)
+    cols = len(vis_list) * (2 if use_lof else 1)
     rows = Nj if not "mask" in kwargs else np.sum(kwargs["mask"])
     figsize = (rows * 5, cols * 5)
     fig = plt.figure(figsize=figsize)
@@ -33,37 +33,26 @@ def vis_heatmap_data(image, pred_hms, gt_hms, Nj, htree, reg_method, **kwargs):
             # Joints
             if "mask" in kwargs and not kwargs["mask"][i]:
                 continue
-            ax = fig.add_subplot(cols, rows, (2 if reg_method else 1)*rows*j+fig_pos+1, xticks=[], yticks=[])
+            ax = fig.add_subplot(cols, rows, (2 if use_lof else 1)*rows*j+fig_pos+1, xticks=[], yticks=[])
             fig_pos += 1
             try:
                 ax.set_title(htree.node_list[i]["name"])
             except IndexError:
                 ax.set_title(f"Undefined_{i}")
             draw_heatmap_on_image(ax, image, kp_hms[i])
-            # Bones
-            if not i == 0:
+        # Bones
+        if use_lof:
+            for i in range(len(htree.limb_pairs)):
                 try:
-                    px, dt = htree.limb_pairs[i - 1]
+                    px, dt = htree.limb_pairs[i]
                     limb_name = htree.node_list[px]["name"] + " - " + htree.node_list[dt]["name"]
                 except IndexError:
                     limb_name = f"Undefined_{i}"
-                if reg_method in ["heatmap2d", "vanishing_map", "openpose", "lof"]:
-                    if "pred_limb_labels" in kwargs:
-                        vec = kwargs[name+'_limb_labels'][i-1]
-                        limb_name += " [" + ", ".join([f"{vec[i]:.2f}" for i in range(vec.shape[0])]) + "]"
-                    ax = fig.add_subplot(2*len(vis_list), Nj, (2*j+1)*Nj+i+1, xticks=[], yticks=[], title=limb_name)
-                    draw_heatmap_on_image(ax, image, df_hms[i-1])
-                elif reg_method == "heatmap1d":
-                    if name == "pred":
-                        ax = fig.add_subplot(2*len(vis_list), Nj, (2*j+1)*Nj+i+1, title=limb_name)
-                        gt_density = kwargs["gt_density"]
-                        pred_density = kwargs["pred_density"]
-                        vis_1d_densities(ax, gt_density[i-1, :], pred_density[i-1, :])
-                elif reg_method == "offsetmap":
-                    ax = fig.add_subplot(2*len(vis_list), Nj, (2*j+1)*Nj+i+1, xticks=[], yticks=[], title=limb_name)
-                    gt_offsetmap = kwargs["gt_offsetmap"]
-                    pred_offsetmap = kwargs["pred_offsetmap"]
-                    draw_offset_on_image(ax, image, eval(name+"_offsetmap")[i-1, ...])
+                if "pred_limb_labels" in kwargs:
+                    vec = kwargs[name+'_limb_labels'][i-1]
+                    limb_name += " [" + ", ".join([f"{vec[i]:.2f}" for i in range(vec.shape[0])]) + "]"
+                ax = fig.add_subplot(2*len(vis_list), Nj, (2*j+1)*Nj+i+1, xticks=[], yticks=[], title=limb_name)
+                draw_heatmap_on_image(ax, image, df_hms[i-1])
     return fig
 
 

@@ -1,4 +1,7 @@
 *.lprof
 log/**
+data/**
+pretrained/**
 **/__pycache__/**
 .vscode/**
+experiments/**

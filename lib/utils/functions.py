@@ -18,6 +18,23 @@ def solve(A, b):
         return torch.linalg.solve(A, b)
 
 
+def collate_pose(data):
+    """
+    The data output might contain array, float, int, and str.
+    """
+    n_types = len(data[0])
+    output = [[] for k in range(n_types)]
+    for d in data:
+        for i in range(n_types):
+            if type(d[i]) == str:
+                output[i].append(d[i])
+            else:
+                output[i].append(torch.as_tensor(d[i]))
+
+    output = [torch.stack(o, dim=0) if type(o) != str else o for o in output]
+    return output
+
+
 def soft_argmax(heatmap, beta):
     """
     heatmap: ... x h x w
@@ -745,7 +762,6 @@ def linear_eigen_method(n_cams, Xs, Ps, confidences=None):
     sln = em[:, np.argmin(ev):np.argmin(ev)+1]
     sln = sln[0:3, :] / sln[3]
     return sln
-
 
 
 if __name__ == "__main__":
