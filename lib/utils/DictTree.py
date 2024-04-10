@@ -142,7 +142,7 @@ def create_human_tree(data_type="human3.6m"):
     create human tree structure according to data_type
     return a DictTree object.
     """
-    if data_type == "human3.6m" or data_type == "mhad":
+    if data_type == "human3.6m" or data_type == "mhad" or data_type == "joint":
         human_tree = DictTree(17, {"name":"Hip", "index":6})
         human_tree.create_node("RHip", 2, parent=6)
         human_tree.create_node("RKnee", 1, parent=2)

@@ -71,7 +71,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         losses["keypoints3d"] = loss_fns.coordinate(model_out.keypoints3d, required_data.keypoints3d, config.TRAIN.SOFT_EP)
         if "lof" in model_out:
             gt_vecs = gt_kps_3d[:, human_tree.limb_pairs[:, 1], :] - gt_kps_3d[:, human_tree.limb_pairs[:, 0], :]
-            local_gt_vecs = gt_vecs.reshape(gt_kps_3d.shape[0], 1, config.MODEL.NUM_BONES, 3) @ required_data.rotation.transpose(-1, -2)
+            local_gt_vecs = gt_vecs.reshape(gt_kps_3d.shape[0], 1, config.MODEL.NUM_LIMBS, 3) @ required_data.rotation.transpose(-1, -2)
             di_loss = loss_fns.di_map(local_gt_vecs[:, :, :, :config.MODEL.NUM_DIMS], model_out.lof, required_data.limb_vis)
             losses["lof"] = 1000 * di_loss
         if "keypoints3d_tri" in model_out:
@@ -146,7 +146,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
             )
 
             if "lof" in model_out:
-                pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+                pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_LIMBS, ...].detach().cpu().numpy()
                 # writer.add_figure(
                 #     "Training vis - vectors",
                 #     draw_di_vec_on_image(images, pred_lb_dm),
@@ -279,16 +279,16 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                         pred_gvec = []
                         n_views = model_out.di_vectors.shape[1]
                         for v in range(n_views):
-                            pred_gvec.append(model_out.di_vectors[d_i, v, ...].reshape(config.MODEL.NUM_BONES, ndim) @ required_data.rotation[d_i, v, ...])
-                            local_gtvecs.append(gt_vecs[d_i].reshape(config.MODEL.NUM_BONES, 3) @ required_data.rotation[d_i, v, ...].T) 
+                            pred_gvec.append(model_out.di_vectors[d_i, v, ...].reshape(config.MODEL.NUM_LIMBS, ndim) @ required_data.rotation[d_i, v, ...])
+                            local_gtvecs.append(gt_vecs[d_i].reshape(config.MODEL.NUM_LIMBS, 3) @ required_data.rotation[d_i, v, ...].T) 
                         
                         pred_gvec = torch.stack(pred_gvec, dim=0)
                         local_gtvecs = torch.stack(local_gtvecs, dim=0)
                         lde_single = sum([vector_error(pred_gvec[i].reshape(-1, ndim), gt_vecs[d_i].view(-1, ndim)).item() for i in range(n_views)]) / n_views
                         # Limb Orientation Field
                         lde_woconf = vector_error(sum([pred_gvec[i].reshape(-1, ndim) for i in range(n_views)]), gt_vecs[d_i].view(-1, ndim)).item()
-                        w_limbs = model_out.confidences[:, :, :config.MODEL.NUM_BONES]
-                        w_pts = model_out.confidences[:, :, config.MODEL.NUM_BONES:]
+                        w_limbs = model_out.confidences[:, :, :config.MODEL.NUM_LIMBS]
+                        w_pts = model_out.confidences[:, :, config.MODEL.NUM_LIMBS:]
                         lde_wconf = vector_error(sum([w_limbs[d_i, i].unsqueeze(-1) * pred_gvec[i].reshape(-1, ndim) for i in range(n_views)]), gt_vecs[d_i].view(-1, 3)).item()
                         result["LDE-single"][required_data.identity[d_i]].append(lde_single)
                         result["LDE w/o conf"][required_data.identity[d_i]].append(lde_woconf)
@@ -297,10 +297,10 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                     elif ndim == 2:
                         n_views = model_out.di_vectors.shape[1]
                         for v in range(n_views):
-                            local_gtvecs.append(gt_vecs[d_i].reshape(config.MODEL.NUM_BONES, 3) @ required_data.rotation[d_i, v, ...].T)
+                            local_gtvecs.append(gt_vecs[d_i].reshape(config.MODEL.NUM_LIMBS, 3) @ required_data.rotation[d_i, v, ...].T)
                         local_gtvecs = torch.stack(local_gtvecs, dim=0)
-                        w_limbs = model_out.confidences[:, :, :config.MODEL.NUM_BONES]
-                        w_pts = model_out.confidences[:, :, config.MODEL.NUM_BONES:]
+                        w_limbs = model_out.confidences[:, :, :config.MODEL.NUM_LIMBS]
+                        w_pts = model_out.confidences[:, :, config.MODEL.NUM_LIMBS:]
                         lde_2d = sum([vector_error(local_gtvecs[i].reshape(-1, 3)[:, :2], model_out.di_vectors[d_i, i].view(-1, ndim)).item() for i in range(n_views)]) / n_views
                     result["LDE2D"][required_data.identity[d_i]].append(lde_2d)
                     result["weight ratio"][required_data.identity[d_i]].append(torch.mean(w_limbs).item() / torch.mean(w_pts).item())
@@ -326,7 +326,7 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                         gt_kps_2d[i, ...] = (homo_kp_2d[:2, :] / homo_kp_2d[2:3, :]).T
 
                     if "lof" in model_out:
-                        pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_BONES, ...].detach().cpu().numpy()
+                        pred_lb_dm = model_out.lof[vis_idx, :, :config.MODEL.NUM_LIMBS, ...].detach().cpu().numpy()
                         cam_idx = np.random.randint(0, nv)
                         pred_lb_dm_cam = np.linalg.norm(pred_lb_dm[cam_idx, ...], axis=1)
                         pred_hm = model_out.heatmap #.view(required_data.images.shape[:2] + model_out.heatmap.shape[1:])

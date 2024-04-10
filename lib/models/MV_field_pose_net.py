@@ -29,7 +29,7 @@ class MultiViewFPNet(nn.Module):
         self.soft_argmax = SoftArgmax(*cfg.MODEL.EXTRA.HEATMAP_SIZE, cfg.MODEL.SOFTMAX_BETA)
 
         self.num_joints = cfg.MODEL.NUM_JOINTS
-        self.num_bones = cfg.MODEL.NUM_BONES
+        self.num_bones = cfg.MODEL.NUM_LIMBS
         self.softmax_beta = cfg.MODEL.SOFTMAX_BETA
         self.use_lof = cfg.MODEL.USE_LOF
         self.backbone_out_label = cfg.MODEL.BACKBONE_OUTPUT
@@ -47,7 +47,7 @@ class MultiViewFPNet(nn.Module):
         self.fix_ths = [cfg.MODEL.CO_FIXING.VEC_IMPROVE_TH, cfg.MODEL.CO_FIXING.VEC_FIX_UB, 
                         cfg.MODEL.CO_FIXING.PTS_IMPROVE_TH, cfg.MODEL.CO_FIXING.PTS_FIX_UB]
 
-    @profile
+    # @profile
     def forward(self, images, proj_mats, htree, intrinsics=None, rotation=None, camctr=None, gt_label=None, fix_heatmap=False, **kwargs):
         """
         images: batch_size x n_views x n_channels x h x w.
@@ -165,7 +165,7 @@ def get_MVFPNet(config, is_train=False):
     model = MultiViewFPNet(config, is_train)
 
 
-@profile
+# @profile
 def optimize_wrt_params(kps_2d, proj_mats, htree, use_lof, **kwargs):
     """
     kps_2d: batch_size x n_views x n_joints x 2 x 1

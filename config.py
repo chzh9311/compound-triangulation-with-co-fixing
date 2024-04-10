@@ -7,8 +7,8 @@ from easydict import EasyDict as edict
 
 def get_config(name):
     try:
-        f = open(name, encoding="utf-8")
-        cfg = edict(yaml.load(f, Loader=yaml.FullLoader))
+        with open(name, encoding="utf-8") as f:
+            cfg = edict(yaml.load(f, Loader=yaml.FullLoader))
         return cfg
     except FileNotFoundError as e:
         logging.log(level=logging.ERROR, msg="File %s Not found. Make sure you have the right name typed in." % name)
@@ -31,6 +31,8 @@ def overwrite_cfg(config0, config1):
                 config0[k] = overwrite_cfg(config0[k], config1[k])
             else:
                 config0[k] = config1[k]
+        else:
+            config0[k] = config1[k]
     return config0
 
 
@@ -64,7 +66,7 @@ config.MODEL.STYLE = "pytorch"
 config.MODEL.SOFTMAX_BETA = 100
 config.MODEL.IMAGE_SIZE = [320, 320]
 config.MODEL.NUM_JOINTS = 16
-config.MODEL.NUM_BONES = 15
+config.MODEL.NUM_LIMBS = 15
 config.MODEL.INIT_WEIGHTS = True
 config.MODEL.LOAD_FINAL_WEIGHTS = True
 config.MODEL.LOAD_DECONVS = True

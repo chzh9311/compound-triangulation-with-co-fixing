@@ -1,8 +1,11 @@
+GPUS:
+  - 0
+  - 1
 DATASET:
   NAME: human3.6m
-  H36M_ROOT: /home/chenzhuo/data/h36m-fetch/processed
-  H36M_LABELS: /home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy
-  H36M_MONOLABELS: ../DensityFieldPose/data/h36m/labels/human36m-monocular-labels-GTbboxes.npy
+  H36M_ROOT: /data1/share/dataset/human36m_multi-view/
+  H36M_LABELS: /data1/share/dataset/human36m_multi-view/extra/human36m-multiview-labels-GTbboxes.npy
+  H36M_MONOLABELS: data/human36m-monocular-labels-GTbboxes.npy
 MODEL:
   STYLE: "pytorch"
   SOFTMAX_BETA: 100
@@ -10,13 +13,13 @@ MODEL:
     - 256
     - 256
   NUM_JOINTS: 17
-  NUM_BONES: 16
+  NUM_LIMBS: 16
   INIT_WEIGHTS: True
   LOAD_FINAL_WEIGHTS: False
   LOAD_DECONVS: False
 #  PRETRAINED: pretrained/pytorch/pose_mpii/pose_resnet_50_256x256.pth.tar
   # PRETRAINED: pretrained/from_lt/pretrained.pth
-  PRETRAINED: /home/chenzhuo/Projects/DNN_3DHPE/Mine/DensityFieldPose/pretrained/pytorch/pose_mpii/pose_resnet_101_256x256.pth.tar
+  PRETRAINED: pretrained/pose_mpii_101_256x256.pth.tar
   BACKBONE_WEIGHTS: 
 #  BACKBONE_WEIGHTS: log/backbone/Training_ResNet50_256x256_direct_regress/weights/best.pth
 

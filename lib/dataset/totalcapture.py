@@ -6,7 +6,7 @@ import torch
 import pickle
 from torch.utils.data import Dataset
 from lib.dataset.Camera import Camera
-from lib.dataset.human36m import crop_image, generate_gaussian_target, gaussian_direction_field, normalize_box
+from lib.dataset.human36m import crop_image, generate_gaussian_target, gaussian_lof, normalize_box
 from lib.utils.DictTree import create_human_tree
 from lib.utils.functions import project
 
@@ -179,9 +179,9 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
                 dires = joints_3d.T[:, LIMB_PAIRS[:, 1]] - joints_3d.T[:, LIMB_PAIRS[:, 0]]
                 dires /= np.linalg.norm(dires, axis=0, keepdims=True)
                 if len(self.limb_sigmas):
-                    df_hm = gaussian_direction_field(self.heatmap_shape, dires.T, bones, self.limb_sigmas)
+                    df_hm = gaussian_lof(self.heatmap_shape, dires.T, bones, self.limb_sigmas)
                 else:
-                    df_hm = gaussian_direction_field(self.heatmap_shape, dires.T, bones, [self.sigma] * LIMB_PAIRS.shape[0])
+                    df_hm = gaussian_lof(self.heatmap_shape, dires.T, bones, [self.sigma] * LIMB_PAIRS.shape[0])
                 output.append(df_hm[:, :self.feature_dim].reshape(-1, *self.heatmap_shape))
         
         return output

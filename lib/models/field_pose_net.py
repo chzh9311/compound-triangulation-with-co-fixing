@@ -178,7 +178,7 @@ class FieldPoseNet(nn.Module):
         )
         self.use_lof = cfg.MODEL.USE_LOF
         self.num_joints = cfg.MODEL.NUM_JOINTS
-        self.num_limbs = cfg.MODEL.NUM_BONES
+        self.num_limbs = cfg.MODEL.NUM_LIMBS
         if self.use_lof:
             # Restore settings.
             self.inplanes = self.encode_planes
@@ -191,13 +191,13 @@ class FieldPoseNet(nn.Module):
 
             self.final_layer2 = nn.Conv2d(
                 in_channels=extra.NUM_DECONV_FILTERS[-1],
-                out_channels=cfg.MODEL.NUM_BONES * cfg.MODEL.NUM_DIMS,
+                out_channels=cfg.MODEL.NUM_LIMBS * cfg.MODEL.NUM_DIMS,
                 kernel_size=extra.FINAL_CONV_KERNEL,
                 stride=1,
                 padding=1 if extra.FINAL_CONV_KERNEL == 3 else 0
             )
             if self.use_conf:
-                self.confidences = GlobalAveragePoolingHead(512*block.expansion, cfg.MODEL.NUM_JOINTS+cfg.MODEL.NUM_BONES)
+                self.confidences = GlobalAveragePoolingHead(512*block.expansion, cfg.MODEL.NUM_JOINTS+cfg.MODEL.NUM_LIMBS)
         elif self.use_conf:
             # self.vol_confidences = GlobalAveragePoolingHead(512*block.expansion, 32)
             self.alg_confidences = GlobalAveragePoolingHead(512*block.expansion, cfg.MODEL.NUM_JOINTS)
@@ -419,6 +419,7 @@ def get_FPNet(cfg, is_train=False, **kwargs):
 
     if is_train and cfg.MODEL.INIT_WEIGHTS:
         model.init_weights(cfg.MODEL.PRETRAINED, cfg.MODEL.LOAD_DECONVS)
+        print(f"Pretrained weights loaded from {cfg.MODEL.PRETRAINED}")
 
     return model
 

@@ -19,20 +19,18 @@ from lib.utils.functions import *
 from lib.utils.evaluate import vector_error
 from lib.utils.DictTree import create_human_tree
 from lib.utils.vis import vis_density, vis_specific_vector_field, draw_di_vec_on_image, vis_heatmap_data, draw_heatmap_on_image, vis_2d_kps, analyze_particular_frame, analyze_lof
-from lib.utils.functions import fit_density, fit_1d_density, calc_vanish, normalize, euler2rot, bilinear_line_integral_offline
 from lib.dataset.human36m import Human36MMonocularFeatureMapDataset, generate_vanishing_map, Human36MMultiViewDataset
-from lib.dataset.h36m_3dhp_joint_dataset import MPI_INF_3DHP_train
 from lib.dataset.totalcapture import TotalCaptureMonocularFeatureMapDataset, TotalCaptureMultiViewDataset
 from lib.models.MV_field_pose_net import optimize_wrt_params, MultiViewFPNet
+from lib.dataset.mhad import MHADHeatmapDataset
+from lib.dataset.joint import build_2D_dataset, JointDataset
 from lib.models.layers import rdsvd
 from config import get_config
 
 import matplotlib as mpl
-mpl.use("TkAgg")
 import matplotlib.font_manager as fm
 from matplotlib import pyplot as plt
 import seaborn as sns
-from thop import profile
 
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import FancyArrowPatch
@@ -850,9 +848,57 @@ def gen_str(k, v):
 
 
 if __name__ == "__main__":
-    # case_study()
-    cfg = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320-singlebranch.yaml")
-    print(gen_str("config", cfg))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
+    dataset1 = Human36MMonocularFeatureMapDataset(
+        root_dir="/data1/share/dataset/human36m_multi-view/",
+        label_dir="data/human36m-monocular-labels-GTbboxes.npy",
+        sigma=2,
+        image_shape=(256, 256),
+        heatmap_shape=(64, 64),
+        output_type=["images", "heatmap", "joint_vis"],
+        is_train=True,
+        transform=transform,
+        crop=True,
+    )
+
+    dataset2 = MHADHeatmapDataset(
+        root_dir="/data1/share/dataset/MHAD_Berkeley/stereo_camera",
+        label_dir="/data1/share/dataset/MHAD_Berkeley/stereo_camera/extra/mhad-stereo-l-labels-GTbboxes.npy",
+        image_shape=(256, 256),
+        heatmap_shape=(64, 64),
+        output_type=["images", "heatmap", "joint_vis"],
+        transform=transform,
+        test_sample_rate=1,
+        is_train=True,
+        rectificated=True,
+        baseline='l',
+        crop=True)
+    
+    js = JointDataset(dataset1, dataset2)
+
+    test_loader = DataLoader(
+        dataset=js,
+        batch_size=64,
+        shuffle=True,
+        collate_fn = collate_pose,
+        num_workers=1,
+    )
+
+    for i, d in enumerate(test_loader):
+        for dt in d:
+            print(dt.shape)
+        if i > 2:
+            break
+
+
+# if __name__ == "__main__":
+    # # case_study()
+    # cfg = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320-singlebranch.yaml")
+    # print(gen_str("config", cfg))
     # get_bl_tc()
     # generate_fusion_converter()
     # pattern_finding(os.path.join("result_analysis", "h36m_pred_gt_noBad.pkl"))
