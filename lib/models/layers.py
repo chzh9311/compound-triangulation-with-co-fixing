@@ -14,9 +14,9 @@ class SoftArgmax(nn.Module):
         equation: output = \sum_{x}\frac{exp{\beta h(x)}}{\sum_{x}exp{\beta h(x)}}x
         """
         super(SoftArgmax, self).__init__()
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        gridy, gridx = torch.meshgrid(torch.arange(w), torch.arange(h), indexing="xy")
-        self.gridy, self.gridx = gridy.to(self.device).float(), gridx.to(self.device).float()
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.gridy, self.gridx = torch.meshgrid(torch.arange(w), torch.arange(h), indexing="xy")
+        # self.gridy, self.gridx = gridy.to(device).float(), gridx.to(device).float()
         self.beta = beta
         self.hm_shape = (h, w)
 
@@ -27,8 +27,8 @@ class SoftArgmax(nn.Module):
         soft_hms = F.softmax(heatmap * self.beta, dim=-1).view(heatmap.shape[:-1] + self.hm_shape)
 
         norm = torch.sum(soft_hms, dim=(-1, -2))
-        kp_y = torch.sum(soft_hms * self.gridy, dim=(-1, -2)) / norm
-        kp_x = torch.sum(soft_hms * self.gridx, dim=(-1, -2)) / norm
+        kp_y = torch.sum(soft_hms * self.gridy.to(heatmap.device), dim=(-1, -2)) / norm
+        kp_x = torch.sum(soft_hms * self.gridx.to(heatmap.device), dim=(-1, -2)) / norm
 
         return torch.stack((kp_x, kp_y), dim=-1)
 

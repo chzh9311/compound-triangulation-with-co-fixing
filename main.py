@@ -25,14 +25,13 @@ from torch.utils.tensorboard import SummaryWriter
 
 from easydict import EasyDict as edict
 
-from lib.dataset.human36m import Human36MMultiViewDataset, generate_gaussian_target
-from lib.dataset.totalcapture import TotalCaptureMultiViewDataset
+from lib.dataset.joint import build_3D_dataset
 from lib.models.field_pose_net import get_FPNet
 from lib.models.MV_field_pose_net import MultiViewFPNet
 from lib.utils.evaluate import soft_SMPJPE, MPJPE_abs, MPJPE_rel, MPLAE, MPLLE, vector_error, dire_map_pixelwise_loss, line_tri_loss
 from lib.utils.DictTree import create_human_tree
 from lib.utils.utils import make_logger, time_to_string
-from lib.utils.functions import normalize
+from lib.utils.functions import normalize, collate_pose
 from config import update_config, save_config
 from config import config as default_config
 from collections import defaultdict, OrderedDict
@@ -57,13 +56,18 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         model_out = edict()
         losses = edict()
         for d_i, out in enumerate(config.MODEL.REQUIRED_DATA):
-            required_data[out] = data[d_i] if out in ["identity", "index"] else data[d_i].to(device).float()
+            if out in ["identity", "index", "subject", "data_label"]:
+                required_data[out] = data[d_i] 
+            else:
+                required_data[out] = data[d_i].to(device).float()
         # images, projections, gt_kps_3d, gt_dm, gt_mus, gt_bvs, intrinsics = [
         #     data[i].to(device).float() for i in range(len(data))]
-        gt_kps_3d, projections = required_data.keypoints3d, required_data.projections
+        gt_kps_3d = required_data.keypoints3d
+        required_data.num_joints = config.MODEL.NUM_JOINTS
+        required_data.num_limbs = config.MODEL.NUM_LIMBS
         ## Fix_heatmap set to False by default.
-        out_values = model(required_data.images, required_data.projections, htree=human_tree, intrinsics=required_data.intrinsics,
-                           rotation=required_data.rotation, camctr=required_data.cam_ctr)
+        # with torch.autograd.set_detect_anomaly(True):
+        out_values = model(htree=human_tree, **required_data)
         for i, k in enumerate(config.MODEL.MODEL_OUTPUT):
             model_out[k] = out_values[i]
         # heatmaps, pred_kps_2d, pred_kps_3d, pred_mus = model(images, projections, human_tree, intrinsics)
@@ -102,19 +106,12 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         
         if batch_i % config.TRAIN.LOSS_FREQ == config.TRAIN.LOSS_FREQ - 1 or debug:
             current = batch_i * config.TRAIN.BATCH_SIZE
-            if "stacked" in model_out:
-                stage_loss_log = ""
-                for k in stacked_losses.keys():
-                    stage_loss = [f"stage {i}: {stacked_losses[k][i].item():>5f}" for i in range(len(stacked_losses[k]))]
-                    stage_loss_log += f"{k} loss:" + ", ".join(stage_loss)
-                logger.info(f"Loss: {loss.item():>5f}, {stage_loss_log}, currently {current:>7d}/{size:>7d}")
-            else:
-                log_info = f"Total loss: {losses.total:>5f}"
-                for k in losses.keys():
-                    if k != 'total':
-                        log_info += f", {k} loss: {losses[k]:>5f}"
-                logger.info(log_info + f" currently {current:>7d}/{size:>7d}")
-                # logger.info(f"Loss: {loss.item():>5f}, Kp loss: {kp_loss.item():>5f}, Di loss: {di_loss.item():>5f}, currently {current:>7d}/{size:>7d}")
+            log_info = f"Total loss: {losses.total:>5f}"
+            for k in losses.keys():
+                if k != 'total':
+                    log_info += f", {k} loss: {losses[k]:>5f}"
+            logger.info(log_info + f" currently {current:>7d}/{size:>7d}")
+            # logger.info(f"Loss: {loss.item():>5f}, Kp loss: {kp_loss.item():>5f}, Di loss: {di_loss.item():>5f}, currently {current:>7d}/{size:>7d}")
             writer.add_scalars(
                 "Training Loss",
                 losses,
@@ -129,15 +126,6 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
             gt_homo_kp_2d = (P[..., :3] @ required_data.keypoints3d.view(P.shape[0], 1, -1, 3, 1) + P[..., 3:4]).squeeze(-1) # bs x nv x nj x 3
             gt_kps_2d = (gt_homo_kp_2d[..., :2] / gt_homo_kp_2d[..., 2:3]).detach().cpu().numpy()[vis_idx] # bs x nv x nj x 2
             pred_kps_2d = model_out.keypoints2d[vis_idx, ...].squeeze(-1).detach().cpu().numpy() # 4 x 17 x 2
-            # gt_kps_3d = gt_kps_3d[vis_idx, ...].detach().cpu().numpy() # 17 x 3
-            # projection = projections[vis_idx, ...].detach().cpu().numpy() # 4 x 3 x 4
-            # # Reprojection
-            # gt_kps_2d = np.zeros_like(pred_kps_2d)
-            # for i in range(gt_kps_2d.shape[0]):
-            #     P = projection[i, ...]
-            #     homo_kp_3d = np.concatenate((gt_kps_3d.T, np.ones((1, gt_kps_3d.shape[0]))), axis=0)
-            #     homo_kp_2d = P @ homo_kp_3d
-            #     gt_kps_2d[i, ...] = (homo_kp_2d[:2, :] / homo_kp_2d[2:3, :]).T
 
             writer.add_figure(
                 "Training vis - keypoints",
@@ -181,7 +169,7 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
     num_batches = len(dataloader)
     model.eval()
     ndim = config.MODEL.NUM_DIMS
-    criteria = ["MPJPE-ab", "MPJPE-re", "MPLAE", "MPLLE", "JPE2D", "n_samples"]
+    criteria = ["MPJPE-ab", "MPJPE-re", "MPLAE", "MPLLE", "JPE2D", "XYError", "ZError", "n_samples"]
     if config.MODEL.CO_FIXING.FIX_HEATMAP:
         criteria += ["MPJPE-ab_combined", "MPJPE-re_combined", "MPLAE_combined", "MPLLE_combined"]
     if config.MODEL.USE_LOF:
@@ -217,10 +205,10 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                     bls = torch.tensor([bone_lengths[s] for s in required_data.subject], device=device).float()
             else:
                 bls = None
-            out_values = model(required_data.images, required_data.projections, htree=human_tree, intrinsics=required_data.intrinsics,
-                                rotation=required_data.rotation, camctr=required_data.cam_ctr, fix_heatmap=config.MODEL.CO_FIXING.FIX_HEATMAP, 
-                                bone_lengths=bls, sca_steps=config.TEST.SCA_STEPS)
-            # out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, required_data.rotation, required_data.cam_ctr,
+            required_data.num_joints = config.MODEL.NUM_JOINTS
+            required_data.num_limbs = config.MODEL.NUM_LIMBS
+            out_values = model(htree=human_tree, **required_data)
+                                           # out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, required_data.rotation, required_data.cam_ctr,
                             #    fix_heatmap=config.MODEL.CO_FIXING.FIX_HEATMAP)
             # if batch_i == 99:
             #     print(total_time / 100)
@@ -242,6 +230,7 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
             # debug_data["gt_kps_3d"].append(gt_kps_3d)
             # line_loss = test_loss_fns.line_tri_loss(*model_out.lines_tri, required_data.keypoints3d, human_tree.limb_pairs, 1000)
 
+            R = required_data.rotation.unsqueeze(2)
             gt_vecs = gt_kps_3d[:, human_tree.limb_pairs[:, 1], :] - gt_kps_3d[:, human_tree.limb_pairs[:, 0], :]
             homo_kp_2d = (P[..., :3] @ gt_kps_3d.view(P.shape[0], 1, -1, 3, 1) + P[..., 3:4]).squeeze(-1) # bs x nv x nj x 3
             gt_kps_2d = homo_kp_2d[..., :2] / homo_kp_2d[..., 2:3] # bs x nv x nj x 2
@@ -253,6 +242,10 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                 result["MPLAE"][required_data.identity[d_i]].append(test_loss_fns.angle(pred_kps_3d[d_i], gt_kps_3d[d_i], human_tree.limb_pairs).item())
                 result["MPLLE"][required_data.identity[d_i]].append(MPLLE(pred_kps_3d[d_i], gt_kps_3d[d_i], human_tree.limb_pairs).item())
                 result["JPE2D"][required_data.identity[d_i]].append(torch.mean(torch.norm(pred_kps_2d[d_i].squeeze(-1) - gt_kps_2d[d_i], dim=-1)).item())
+                gt_err = R[d_i, 0] @ (pred_kps_3d[d_i] - gt_kps_3d[d_i]).unsqueeze(-1)
+                gt_err = gt_err.squeeze()
+                result["XYError"][required_data.identity[d_i]].append(torch.mean(torch.norm(gt_err[..., :2], dim=-1)).item())
+                result["ZError"][required_data.identity[d_i]].append(torch.mean(torch.abs(gt_err[..., 2])).item())
                 result["n_samples"][required_data.identity[d_i]] += 1
 
                 if config.MODEL.CO_FIXING.FIX_HEATMAP:
@@ -364,11 +357,11 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
             err_list = []
             for data_id in data_ids:
                 err_list += result[c][data_id]
-                result_df[data_id][c] = sum(result[c][data_id]) / len(result[c][data_id])
+                result_df.loc[c, data_id] = sum(result[c][data_id]) / len(result[c][data_id])
             avg_result[c] = result_df.loc[c, "mean"] = sum(err_list) / len(err_list)
         else:
             for data_id in data_ids:
-                result_df[data_id][c] = result[c][data_id]
+                result_df.loc[c, data_id] = result[c][data_id]
             avg_result[c] = result_df.loc[c, "mean"] = sum(result[c].values()) / len(result[c])
     
     log_info = "\n".join([f"{c}: {avg_result[c]}" for c in criteria])
@@ -389,79 +382,43 @@ def run_model(cfg, runMode='test', debug=True):
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])
-    if cfg.DATASET.NAME == 'human3.6m':
-        train_set = Human36MMultiViewDataset(
-            root_dir=cfg.DATASET.H36M_ROOT,
-            label_dir=cfg.DATASET.H36M_LABELS,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            is_train=True,
-            transform=transform,
-            crop=True,
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            use_cameras=cfg.TRAIN.USE_CAMERAS,
-            sigma=cfg.MODEL.EXTRA.SIGMA
-        )
-        test_set = Human36MMultiViewDataset(
-            root_dir=cfg.DATASET.H36M_ROOT,
-            label_dir=cfg.DATASET.H36M_LABELS,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            is_train=False,
-            transform=transform,
-            crop=True,
-            with_damaged_actions=cfg.DATASET.WITH_DAMAGED_ACTIONS,
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            use_cameras=cfg.TEST.USE_CAMERAS,
-            sigma=cfg.MODEL.EXTRA.SIGMA
-        )
-    elif cfg.DATASET.NAME == 'totalcapture':
-        train_set = TotalCaptureMultiViewDataset(
-            root_dir=cfg.DATASET.TC_ROOT,
-            label_dir=cfg.DATASET.TC_LABELS,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            is_train=True,
-            transform=transform,
-            crop=True,
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            use_cameras=cfg.TRAIN.USE_CAMERAS,
-            refine_indicator=cfg.TRAIN.REFINE_INDICATOR,
-            sigma=cfg.MODEL.EXTRA.SIGMA
-        )
-        test_set = TotalCaptureMultiViewDataset(
-            root_dir=cfg.DATASET.TC_ROOT,
-            label_dir=cfg.DATASET.TC_LABELS,
-            image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            is_train=False,
-            transform=transform,
-            crop=True,
-            output_type=cfg.MODEL.REQUIRED_DATA,
-            use_cameras=cfg.TEST.USE_CAMERAS,
-            frame_sample_rate=cfg.TEST.FRAME_SAMPLE_RATE,
-            refine_indicator=cfg.TRAIN.REFINE_INDICATOR,
-            sigma=cfg.MODEL.EXTRA.SIGMA
-        )
+    train_set = build_3D_dataset(cfg, transform, True, True)
+    test_set = build_3D_dataset(cfg, transform, False, True)
 
     train_loader = DataLoader(
         dataset=train_set,
         batch_size=cfg.TRAIN.BATCH_SIZE,
         shuffle=cfg.TRAIN.SHUFFLE,
+        collate_fn=collate_pose,
         num_workers=cfg.TRAIN.NUM_WORKERS
     )
     test_loader = DataLoader(
         dataset=test_set,
         batch_size=cfg.TEST.BATCH_SIZE,
         shuffle=cfg.TEST.SHUFFLE,
+        collate_fn=collate_pose,
         num_workers=cfg.TEST.NUM_WORKERS
     )
     htree = create_human_tree(cfg.DATASET.NAME)
     print("Finished loading data.")
+    is_train = runMode == "train"
 
-    model = MultiViewFPNet(cfg, True)
-    if runMode == "train":
-        model.backbone.load_backbone_params(cfg.MODEL.PRETRAINED, load_confidences=False)
-        print("Pretrained 2D backbone loaded.")
+    if cfg.DATASET.NAME == "joint":
+        cfg.MODEL.NUM_JOINTS = cfg.MODEL.NUM_JOINTS1 + cfg.MODEL.NUM_JOINTS2
+        cfg.MODEL.NUM_LIMBS = cfg.MODEL.NUM_LIMBS1 + cfg.MODEL.NUM_LIMBS2
+        cfg.MODEL.REQUIRED_DATA.append("data_label")
+        model = MultiViewFPNet(cfg, is_train)
+        cfg.MODEL.NUM_JOINTS = cfg.MODEL.NUM_JOINTS1
+        cfg.MODEL.NUM_LIMBS = cfg.MODEL.NUM_LIMBS1
     else:
-        model.backbone.load_backbone_params(cfg.MODEL.BACKBONE_WEIGHTS, load_confidences=True)
-        print("2D backbone weights loaded.")
+        model = MultiViewFPNet(cfg, is_train)
+
+    if runMode == "train":
+        model.backbone.load_backbone_params(cfg.MODEL.PRETRAINED)
+        print(f"Pretrained 2D backbone loaded from {cfg.MODEL.PRETRAINED}.")
+    else:
+        model.backbone.load_backbone_params(cfg.MODEL.BACKBONE_WEIGHTS)
+        print(f"2D backbone weights loaded from {cfg.MODEL.BACKBONE_WEIGHTS}.")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.TRAIN.LEARNING_RATE)
 

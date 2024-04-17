@@ -339,13 +339,7 @@ class FieldPoseNet(nn.Module):
                 if isinstance(m, nn.Conv2d):
                     nn.init.normal_(m.weight, std=0.001)
                     nn.init.constant_(m.bias, 0)
-        # Remove the parameters of final_layer in pretrained model
-        if not self.load_final_weights:
-            del (state_dict["final_layer.weight"])
-            del (state_dict["final_layer.bias"])
-        else:
-            state_dict["final_layer.weight"] = state_dict["final_layer.weight"][:17, ...]
-            state_dict["final_layer.bias"] = state_dict["final_layer.bias"][:17]
+
         if hasattr(self, "deconv_layers2"):
             for name, m in self.deconv_layers2.named_modules():
                 if isinstance(m, nn.ConvTranspose2d):
@@ -366,6 +360,17 @@ class FieldPoseNet(nn.Module):
                     logger.info('=> init {}.bias as 0'.format(name))
                     nn.init.normal_(m.weight, std=0.001)
                     nn.init.constant_(m.bias, 0)
+
+        # Remove the parameters of final_layer in pretrained model
+        if not self.load_final_weights:
+            del (state_dict["final_layer.weight"])
+            del (state_dict["final_layer.bias"])
+        else:
+            state_dict["final_layer.weight"] = state_dict["final_layer.weight"][:17, ...]
+            state_dict["final_layer.bias"] = state_dict["final_layer.bias"][:17]
+            if hasattr(self, "deconv_layers2"):
+                state_dict["final_layer2.weight"] = state_dict["final_layer2.weight"][:48, ...]
+                state_dict["final_layer2.bias"] = state_dict["final_layer2.bias"][:48]
         self.load_state_dict(state_dict, strict=False)
         # else:
         #     logger.error('=> imagenet pretrained model dose not exist')
@@ -392,9 +397,13 @@ class FieldPoseNet(nn.Module):
             else:
                 new_state_dict[key] = state_dict[key]
             
-        # for key in new_state_dict.keys():
-        #     if key.startswith("final_layer"):
-        #         new_state_dict[key] = new_state_dict[key][:17]
+        for key in new_state_dict.keys():
+            if key.startswith("final_layer2"):
+                new_state_dict[key] = new_state_dict[key][:48]
+            elif key.startswith("final_layer"):
+                new_state_dict[key] = new_state_dict[key][:17]
+            elif key.startswith("confidences.head.4"):
+                new_state_dict[key] = new_state_dict[key][:33]
             
         self.load_state_dict(new_state_dict, strict=False)
 
