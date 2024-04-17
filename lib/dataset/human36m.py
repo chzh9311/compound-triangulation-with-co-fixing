@@ -4,6 +4,7 @@ The preprocess is done by https://github.com/CHUNYUWANG/H36M-Toolbox
 """
 import os
 
+from random import shuffle
 import numpy as np
 import cv2
 import torch
@@ -440,6 +441,7 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
                  crop=True,
                  use_gt_data_type=None,
                  use_cameras=[1, 2, 3, 4],
+                 stereo_sample=False,
                  sigma=2):
         super(Human36MMultiViewDataset, self).__init__(
             root_dir, label_dir, image_shape, undistort, heatmap_shape, sample_level, output_type,
@@ -448,6 +450,16 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
 
         self.use_gt_data_type = use_gt_data_type
         self.cam_ids = [i-1 for i in use_cameras]
+        self.stereo_sample = stereo_sample
+        if not is_train:
+            missing = []
+            for i, label in enumerate(self.labels['table']):
+                bbox_hs = np.array([box[2] - box[0] for box in label['bbox_by_camera_tlbr']])
+                if np.any(bbox_hs == 0):
+                    missing.append(i)
+            
+            self.labels['table'] = np.delete(self.labels['table'], missing)
+
 
     def __len__(self):
         # return 200
@@ -463,6 +475,9 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
         subject = self.labels['subject_names'][shot['subject_idx']]
         action = self.labels['action_names'][shot['action_idx']]
         frame_idx = shot['frame_idx']
+        if self.stereo_sample:
+            shuffle(self.cam_ids)
+            self.cam_ids = self.cam_ids[:2]
 
         for camera_idx in self.cam_ids:
             camera_name = self.labels['camera_names'][camera_idx]
@@ -470,24 +485,22 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
             # load bounding box
             bbox = shot['bbox_by_camera_tlbr'][camera_idx][[1,0,3,2]] # TLBR to LTRB
             bbox_height = bbox[2] - bbox[0]
-            if bbox_height == 0:
-                # convention: if the bbox is empty, then this view is missing
-                continue
-            bbox = normalize_box(bbox)
 
             # load image
             image_path = os.path.join(
-                self.root_dir, subject, action, 'imageSequence' + '-undistorted' * self.undistort,
+                self.root_dir, 'processed', '_undistorted' * self.undistort, subject,
+                action, 'imageSequence' + '-undistorted'*self.undistort,
                 camera_name, 'img_%06d.jpg' % (frame_idx+1))
-            assert os.path.isfile(image_path), '%s doesn\'t exist' % image_path
+            assert os.path.isfile(image_path), f'{image_path} doesn\'t exist, index: {idx:d}' 
             image = cv2.imread(image_path)
 
             # load camera
             shot_camera = self.labels['cameras'][shot['subject_idx'], camera_idx]
             retval_camera = Camera(shot_camera['R'], shot_camera['t'], shot_camera['K'], shot_camera['dist'], camera_name)
 
-            if self.crop:
+            if self.crop and bbox_height > 0:
                 # crop image
+                bbox = normalize_box(bbox)
                 image = crop_image(image, bbox)
                 retval_camera.update_after_crop(bbox)
 

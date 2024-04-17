@@ -36,7 +36,6 @@ class MHADBaseDataset(Dataset):
         self.root_dir = root_dir
         self.label_dir = label_dir
         self.image_shape = image_shape
-        self.heatmap_shape = heatmap_shape
         self.transform = transform
         self.output_type = output_type
         self.crop = crop
@@ -47,7 +46,7 @@ class MHADBaseDataset(Dataset):
         self.flip_pairs = []
         self.num_joints = 17
 
-        self.labels = np.load(self.label_dir, allow_pickle=True).item()
+        self.labels = np.load(os.path.join(self.label_dir, f'mhad-stereo-{baseline}-labels-GTbboxes.npy'), allow_pickle=True).item()
 
         train_subjects = ['S01','S02','S03','S04','S05','S06','S07','S09','S10','S12']
         test_subjects = ['S08', 'S11']
@@ -95,7 +94,6 @@ class MHADHeatmapDataset(MHADBaseDataset):
         super(MHADHeatmapDataset, self).__init__(
             root_dir, label_dir,
             image_shape=image_shape,
-            heatmap_shape=heatmap_shape,
             output_type=output_type,
             transform=transform,
             test_sample_rate=test_sample_rate,
@@ -104,6 +102,7 @@ class MHADHeatmapDataset(MHADBaseDataset):
             baseline=baseline,
             crop=crop)
         self.sigma = sigma
+        self.heatmap_shape=heatmap_shape,
 
 
     def __len__(self):
@@ -154,8 +153,7 @@ class MHADHeatmapDataset(MHADBaseDataset):
 
         # load camera
         shot_camera = self.labels['cameras'][group_idx][camera_idx]
-        T = -shot_camera['R'].T @ shot_camera['t']
-        retval_camera = Camera(shot_camera['R'], T, shot_camera['K'],
+        retval_camera = Camera(shot_camera['R'], shot_camera['t'], shot_camera['K'],
                                 name = camera_name)
         
         if self.crop:
@@ -214,7 +212,6 @@ class MHADHeatmapDataset(MHADBaseDataset):
 class MHADStereoDataset(MHADBaseDataset):
     def __init__(self, root_dir, label_dir,
                  image_shape=(256, 256),
-                 heatmap_shape=(64, 64),
                  output_type=[],
                  transform=None,
                  test_sample_rate=1,
@@ -223,10 +220,9 @@ class MHADStereoDataset(MHADBaseDataset):
                  baseline='s',
                  crop=True):
 
-        super(MHADHeatmapDataset, self).__init__(
+        super(MHADStereoDataset, self).__init__(
             root_dir, label_dir,
             image_shape=image_shape,
-            heatmap_shape=heatmap_shape,
             output_type=output_type,
             transform=transform,
             test_sample_rate=test_sample_rate,
@@ -258,16 +254,13 @@ class MHADStereoDataset(MHADBaseDataset):
             # load bounding box
             bbox = shot['bbox_by_camera_tlbr'][camera_idx][[1, 0, 3, 2]]  # TLBR to LTRB
             bbox_height = bbox[2] - bbox[0]
-            if bbox_height == 0:
-                # convention: if the bbox is empty, then this view is missing
-                continue
 
             # scale the bounding box
             # bbox = scale_bbox(bbox, self.scale_bbox)
 
             # load image
             image_path = os.path.join(
-                self.mhad_root, 'Cluster01', 'rectificated' * self.rectificated, 
+                self.root_dir, 'Cluster01', 'rectificated' * self.rectificated, 
                 self.baseline_width * self.rectificated, str(group_idx) * self.rectificated,
                 'Cam%02d'%(int(camera_name)), subject, action, reptition, 
                 'img_l01_c%02d_s%02d_a%02d_r%02d_%05d.jpg' % (int(camera_name), subject_idx+1, action_idx+1, reptition_idx+1, frame_idx))
@@ -276,10 +269,10 @@ class MHADStereoDataset(MHADBaseDataset):
             image = cv2.imread(image_path)
 
             # load camera
-            shot_camera = self.labels['cameras'][shot['subject_idx'], camera_idx]
-            retval_camera = Camera(shot_camera['R'], shot_camera['t'], shot_camera['K'], shot_camera['dist'], camera_name)
+            shot_camera = self.labels['cameras'][group_idx][camera_idx]
+            retval_camera = Camera(shot_camera['R'], shot_camera['t'], shot_camera['K'], name = camera_name)
 
-            if self.crop:
+            if self.crop and bbox_height > 0:
                 # crop image
                 image = crop_image(image, bbox)
                 retval_camera.update_after_crop(bbox)
@@ -326,7 +319,7 @@ class MHADStereoDataset(MHADBaseDataset):
         output = []
         for l in self.output_type:
             if l == "identity":
-                output.append(action[:-2])
+                output.append(action)
             elif l == "subject":
                 output.append(subject)
             # elif l == "lof":
@@ -334,7 +327,7 @@ class MHADStereoDataset(MHADBaseDataset):
             #     kps_in_hm = (joints_2d - bbox0[:2].reshape(1, 2)) / feat_strides.reshape(1, 2)
             #     kps_hm = generate_gaussian_target(self.heatmap_shape, kps_in_hm, self.sigma)
             elif l == "limb_vis":
-                output.append(np.ones((len(self.cam_ids), LIMB_PAIRS.shape[0])))
+                output.append(np.ones((2, LIMB_PAIRS.shape[0])))
             else:
                 output.append(eval(label2value[l]))
 

@@ -238,7 +238,7 @@ def case_study():
     model.eval()
 
     if 'cam_ctr' in required_data:
-        out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, rotation=required_data.rotation, camctr=required_data.cam_ctr)
+        out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, rotation=required_data.rotation, cam_ctr=required_data.cam_ctr)
     else:
         out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, rotation=required_data.rotation)
 
@@ -605,7 +605,7 @@ def get_bl_tc():
     #             else:
     #                 required_data[out] = data[d_i].to(device).float()
     #         out_values = model(required_data.images, required_data.projections, htree=human_tree, intrinsics=required_data.intrinsics,
-    #                             rotation=required_data.rotation, camctr=required_data.cam_ctr, fix_heatmap=cfg.MODEL.CO_FIXING.FIX_HEATMAP, 
+    #                             rotation=required_data.rotation, cam_ctr=required_data.cam_ctr, fix_heatmap=cfg.MODEL.CO_FIXING.FIX_HEATMAP, 
     #                             pred_keypoints_3d=None, bone_lengths=None, sca_steps=cfg.TEST.SCA_STEPS)
     #         print(out_values)
  

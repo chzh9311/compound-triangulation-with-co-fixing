@@ -31,7 +31,7 @@ def collate_pose(data):
             else:
                 output[i].append(torch.as_tensor(d[i]))
 
-    output = [torch.stack(o, dim=0) if type(o) != str else o for o in output]
+    output = [torch.stack(o, dim=0) if type(o[0]) != str else o for o in output]
     return output
 
 

@@ -2,9 +2,9 @@ GPUS:
   - 0
 DATASET:
   NAME: human3.6m
-  H36M_ROOT: /home/chenzhuo/data/h36m-fetch/processed
-  H36M_LABELS: /home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy
-  H36M_MONOLABELS: /home/chenzhuo/Projects/DNN_3DHPE/Mine/DensityFieldPose/data/h36m/labels/human36m-monocular-labels-GTbboxes.npy
+  ROOT: /home/chenzhuo/data/h36m-fetch/processed
+  LABELS: /home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy
+  MONOLABELS: /home/chenzhuo/Projects/DNN_3DHPE/Mine/DensityFieldPose/data/h36m/labels/human36m-monocular-labels-GTbboxes.npy
   WITH_DAMAGED_ACTIONS: True
 MODEL:
   NAME: 'lofpose'

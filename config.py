@@ -31,10 +31,10 @@ def overwrite_cfg(config0, config1):
                 config0[k] = overwrite_cfg(config0[k], config1[k])
             else:
                 config0[k] = config1[k]
-        else:
+    for k, v in config1.items():
+        if k not in config0:
             config0[k] = config1[k]
     return config0
-
 
 def update_config(config, args):
     if args.cfg:
@@ -53,11 +53,9 @@ config.GPUS = [0, 1]
 
 config.DATASET = edict()
 config.DATASET.NAME = "totalcapture"
-config.DATASET.TC_ROOT = "/home/chenzhuo/data/totalcapture/TotalCapture-Toolbox/data/images"
-config.DATASET.TC_LABELS = "/home/chenzhuo/data/totalcapture/TotalCapture-Toolbox/data/annot"
-config.DATASET.H36M_ROOT = "/home/chenzhuo/data/h36m-fetch/processed"
-config.DATASET.H36M_LABELS = "/home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy"
-config.DATASET.H36M_MONOLABELS = "data/h36m/labels/human36m-monocular-labels-GTbboxes.npy"
+config.DATASET.ROOT = "/home/chenzhuo/data/h36m-fetch/processed"
+config.DATASET.LABELS = "/home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy"
+config.DATASET.MONOLABELS = "data/h36m/labels/human36m-monocular-labels-GTbboxes.npy"
 config.DATASET.WITH_DAMAGED_ACTIONS = True
 
 config.MODEL = edict()
