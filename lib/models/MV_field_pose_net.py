@@ -97,8 +97,7 @@ class MultiViewFPNet(nn.Module):
             self.num_limbs = n_limbs
             out_values.lof = lof
             out_values.confidences = confidences
-        else:
-            heatmap = out_values.heatmap
+            out_values.heatmap = heatmap
         Nj, Nl = self.num_joints, self.num_limbs
 
         if "confidences" in self.backbone_out_label:
@@ -109,7 +108,7 @@ class MultiViewFPNet(nn.Module):
             else:
                 out_values.confidences = torch.ones(batch_size, n_views, Nj, device=device) / n_views
 
-        kps_in_hm = self.soft_argmax(heatmap) # b, nv, njoint, 2
+        kps_in_hm = self.soft_argmax(out_values.heatmap) # b, nv, njoint, 2
         # kps_in_hm = kps_in_hm[:, :, :, [1, 0]]
 
         kps = torch.stack((kps_in_hm[:, :, :, 1] * images_shape[3] / w,
@@ -119,7 +118,7 @@ class MultiViewFPNet(nn.Module):
         if not self.use_gt:
             if fix_heatmap:
                 kps_combined, di_combined, limb_kps_combined, dm_fixed, hm_fixed = self.fusion_layer(
-                    heatmap, out_values.lof, projections, rotation, cam_ctr, images_shape[3:], out_values.confidences,
+                    out_values.heatmap, out_values.lof, projections, rotation, cam_ctr, images_shape[3:], out_values.confidences,
                     *self.fix_ths)
                 out_values.di_combined = di_combined
             # limb_pairs = np.array(htree.limb_pairs)

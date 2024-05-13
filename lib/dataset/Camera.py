@@ -40,6 +40,15 @@ class Camera:
         new_cy = cy * (new_height / height)
 
         self.K[0, 0], self.K[1, 1], self.K[0, 2], self.K[1, 2] = new_fx, new_fy, new_cx, new_cy
+    
+    def project(self, kps3d):
+        homo_kps3d = np.concatenate((kps3d, np.ones(kps3d.shape[:-1] + (1,))), axis=-1)
+        homo_kps3d = homo_kps3d.reshape(*homo_kps3d.shape, 1)
+        sz = len(homo_kps3d.shape)
+        P = self.projection.reshape((1,)*(sz-2) + (3, 4))
+        homo_kps2d = (P @ homo_kps3d).reshape(*homo_kps3d.shape[:-2], -1)
+        kps2d = homo_kps2d[..., :2] / homo_kps2d[..., 2:3]
+        return kps2d
 
     @property
     def projection(self):

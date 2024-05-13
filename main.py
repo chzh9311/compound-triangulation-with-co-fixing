@@ -28,7 +28,7 @@ from easydict import EasyDict as edict
 from lib.dataset.joint import build_3D_dataset
 from lib.models.field_pose_net import get_FPNet
 from lib.models.MV_field_pose_net import MultiViewFPNet
-from lib.utils.evaluate import soft_SMPJPE, MPJPE_abs, MPJPE_rel, MPLAE, MPLLE, vector_error, dire_map_pixelwise_loss, line_tri_loss
+from lib.utils.evaluate import soft_SMPJPE, MPJPE_abs, MPJPE_rel, MPLAE, MPLLE, vector_error, dire_map_pixelwise_loss, line_tri_loss, heatmap_central_loss
 from lib.utils.DictTree import create_human_tree
 from lib.utils.utils import make_logger, time_to_string
 from lib.utils.functions import normalize, collate_pose
@@ -45,6 +45,7 @@ from tqdm import tqdm
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# device = 'cpu'
 
 def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, human_tree, writer, logger, debug=False):
     model.train()
@@ -73,6 +74,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         # heatmaps, pred_kps_2d, pred_kps_3d, pred_mus = model(images, projections, human_tree, intrinsics)
         # loss = torch.mean(loss_fn(pred_kps_3d, gt_kps_3d))
         losses["keypoints3d"] = loss_fns.coordinate(model_out.keypoints3d, required_data.keypoints3d, config.TRAIN.SOFT_EP)
+        losses["heatmap"] = 4 * 4096 * loss_fns.heatmap(model_out.heatmap, required_data.keypoints2d_in_hm)
         if "lof" in model_out:
             gt_vecs = gt_kps_3d[:, human_tree.limb_pairs[:, 1], :] - gt_kps_3d[:, human_tree.limb_pairs[:, 0], :]
             local_gt_vecs = gt_vecs.reshape(gt_kps_3d.shape[0], 1, config.MODEL.NUM_LIMBS, 3) @ required_data.rotation.transpose(-1, -2)
@@ -430,7 +432,7 @@ def run_model(cfg, runMode='test', debug=True):
     exp_name = f"{runMode}_{time.strftime('%Y%m%d_%H%M%S')}_{cfg.DATASET.NAME}_{cfg.MODEL.BACKBONE}"
     exp_dir = os.path.join("log", "end2end", exp_name)
 
-    train_loss_fns = edict({"coordinate": soft_SMPJPE, "di_map": dire_map_pixelwise_loss, "line_tri_loss": line_tri_loss})
+    train_loss_fns = edict({"coordinate": soft_SMPJPE, "di_map": dire_map_pixelwise_loss, "line_tri_loss": line_tri_loss, "heatmap": heatmap_central_loss})
     test_loss_fns = edict({"coordinate": (MPJPE_abs, MPJPE_rel), "scalar": nn.L1Loss(), "angle": MPLAE})
 
     try:
@@ -446,7 +448,7 @@ def run_model(cfg, runMode='test', debug=True):
         if runMode == "train":
             if cfg.TRAIN.CONTINUE:
                 with open(cfg.TRAIN.CHECKPOINT, "rb") as ckpf:
-                    prev_ckeckpoint = pickle.load(ckpf)
+                    prev_ckeckpoint = pickle.load(ckpf) #, map_location={"cuda:2":"cuda:0", "cuda:3":"cuda:1"})
                 model.load_state_dict(prev_ckeckpoint["model"], strict=True)
                 best_loss = prev_ckeckpoint["loss"]
                 optimizer.load_state_dict(prev_ckeckpoint["optimizer"])

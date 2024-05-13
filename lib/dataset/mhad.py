@@ -42,6 +42,7 @@ class MHADBaseDataset(Dataset):
         self.is_train = is_train
         self.rectificated = rectificated
         self.baseline_width=baseline
+        self.heatmap_shape = heatmap_shape
         # self.flip_pairs = [[3, 5], [10, 12]]
         self.flip_pairs = []
         self.num_joints = 17
@@ -95,6 +96,7 @@ class MHADHeatmapDataset(MHADBaseDataset):
             root_dir, label_dir,
             image_shape=image_shape,
             output_type=output_type,
+            heatmap_shape=heatmap_shape,
             transform=transform,
             test_sample_rate=test_sample_rate,
             is_train=is_train,
@@ -102,7 +104,6 @@ class MHADHeatmapDataset(MHADBaseDataset):
             baseline=baseline,
             crop=crop)
         self.sigma = sigma
-        self.heatmap_shape=heatmap_shape,
 
 
     def __len__(self):
@@ -212,6 +213,7 @@ class MHADHeatmapDataset(MHADBaseDataset):
 class MHADStereoDataset(MHADBaseDataset):
     def __init__(self, root_dir, label_dir,
                  image_shape=(256, 256),
+                 heatmap_shape=(64, 64),
                  output_type=[],
                  transform=None,
                  test_sample_rate=1,
@@ -226,6 +228,7 @@ class MHADStereoDataset(MHADBaseDataset):
             output_type=output_type,
             transform=transform,
             test_sample_rate=test_sample_rate,
+            heatmap_shape=heatmap_shape,
             is_train=is_train,
             rectificated=rectificated,
             baseline=baseline,
@@ -250,6 +253,7 @@ class MHADStereoDataset(MHADBaseDataset):
         # if self.action_target is not None and self.action_target not in action:
         #     return None
         
+        keypoints = shot["keypoints"]
         for camera_idx, camera_name in enumerate(self.labels['camera_names'][group_idx]):
             # load bounding box
             bbox = shot['bbox_by_camera_tlbr'][camera_idx][[1, 0, 3, 2]]  # TLBR to LTRB
@@ -288,6 +292,8 @@ class MHADStereoDataset(MHADBaseDataset):
             if self.transform:
                 image = self.transform(image)
 
+            sample["boxes"].append(bbox)
+            sample["keypoints2d"].append(retval_camera.project(keypoints))
             sample['images'].append(image)
             sample['detections'].append(bbox + (1.0,))
             sample['cameras'].append(retval_camera)
@@ -296,25 +302,28 @@ class MHADStereoDataset(MHADBaseDataset):
             sample['cam_ctr'].append(- retval_camera.R.T @ retval_camera.t)
             sample['rotation'].append(retval_camera.R)
 
-        # 3D keypoints
-        sample['keypoints'] = shot['keypoints']
-        for i, j in self.flip_pairs:
-            sample['keypoints'][[i, j], :] = sample['keypoints'][[j, i], :]
-
-        # save sample's index
-        sample['indexes'] = idx
-
-        # Post-process to output
         images = np.stack(sample["images"], axis=0)
-        keypoints = sample["keypoints"]
         proj_matrices = np.stack(sample["proj_matrices"], axis=0)
         intrinsics = np.stack(sample['intrinsics'], axis=0)
         rotation = np.stack(sample['rotation'], axis=0)
         cam_ctr = np.stack(sample['cam_ctr'], axis=0)
+        keypoints2d = np.stack(sample["keypoints2d"], axis=0)
+        bbox = np.stack(sample["boxes"], axis=0)
+        for i, j in self.flip_pairs:
+            keypoints2d[:, [i, j], :] = keypoints2d[:, [j, i], :]
+            keypoints[:, [i, j], :] = keypoints[:, [j, i], :]
+
+        keypoints2d = keypoints2d[..., :2]
+        # feat_strides = (bbox[:, 2:] - bbox[:, :2]) / np.array(self.heatmap_shape)
+        kps_in_hm = keypoints2d / 4
+        # save sample's index
+        sample['indexes'] = idx
+
+        # Post-process to output
         # mus, density_map, bvs = self.generate_gt_density(proj_matrices, keypoints, 2)
         label2value = {"images": "images", "mus": "mus", "keypoints3d": "keypoints", "projections":"proj_matrices",
                        "densitymap2d": "density_map", "bonevectors": "bvs", "intrinsics": "intrinsics",
-                       "rotation": "rotation", "lof": "lof", "identity": "data_id",
+                       "rotation": "rotation", "lof": "lof", "identity": "data_id", "keypoints2d_in_hm": "kps_in_hm",
                        "cam_ctr": "cam_ctr", "index": 'idx'}
         output = []
         for l in self.output_type:

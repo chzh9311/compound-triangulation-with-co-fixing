@@ -479,6 +479,8 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
             shuffle(self.cam_ids)
             self.cam_ids = self.cam_ids[:2]
 
+        keypoints = shot["keypoints"]
+
         for camera_idx in self.cam_ids:
             camera_name = self.labels['camera_names'][camera_idx]
 
@@ -515,6 +517,9 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
             if self.transform:
                 image = self.transform(image)
 
+            sample["boxes"].append(bbox)
+            sample["keypoints2d"].append(retval_camera.project(keypoints))
+
             sample['images'].append(image)
             sample['detections'].append(bbox + (1.0,))
             sample['cameras'].append(retval_camera)
@@ -533,15 +538,23 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
 
         # Post-process to output
         images = np.stack(sample["images"], axis=0)
-        keypoints = sample["keypoints"]
         proj_matrices = np.stack(sample["proj_matrices"], axis=0)
         intrinsics = np.stack(sample['intrinsics'], axis=0)
         rotation = np.stack(sample['rotation'], axis=0)
         cam_ctr = np.stack(sample['cam_ctr'], axis=0)
+        keypoints2d = np.stack(sample["keypoints2d"], axis=0)
+        bbox = np.stack(sample["boxes"], axis=0)
+        for i, j in self.flip_pairs:
+            keypoints2d[:, [i, j], :] = keypoints2d[:, [j, i], :]
+            keypoints[:, [i, j], :] = keypoints[:, [j, i], :]
+
+        keypoints2d = keypoints2d[..., :2]
+        # feat_strides = (bbox[:, 2:] - bbox[:, :2]) / np.array(self.heatmap_shape)
+        kps_in_hm = keypoints2d / 4
         # mus, density_map, bvs = self.generate_gt_density(proj_matrices, keypoints, 2)
         label2value = {"images": "images", "mus": "mus", "keypoints3d": "keypoints", "projections":"proj_matrices",
                        "densitymap2d": "density_map", "bonevectors": "bvs", "intrinsics": "intrinsics",
-                       "rotation": "rotation", "lof": "lof", "identity": "data_id",
+                       "rotation": "rotation", "lof": "lof", "identity": "data_id", "keypoints2d_in_hm": "kps_in_hm",
                        "cam_ctr": "cam_ctr", "index": 'idx'}
         output = []
         for l in self.output_type:

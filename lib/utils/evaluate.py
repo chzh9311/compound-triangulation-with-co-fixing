@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 from math import pi as PI
 from lib.utils.functions import normalize
@@ -28,6 +29,40 @@ def heatmap_weighted_MSE(hm1, hm2, dtype='joint', weight=None):
     else:
         errs = 0.5 * torch.mean((hm1 - hm2)**2, dim=(2, 3))
     return torch.mean(errs)
+
+
+def heatmap_max_loss(hm, kp_in_hm):
+    """
+    the loss to regulate that the soft-argmax in heatmap is of the largest value.
+    hm: batch_size x n_views x n_joints x h x w
+    kp_in_hm: batch_size x n_views x n_joints x 2
+    """
+    bs, nv, nj, h, w = hm.shape
+    kp_in_hm[..., 0] = torch.clamp(kp_in_hm[..., 0], min=0, max=w-1)
+    kp_in_hm[..., 1] = torch.clamp(kp_in_hm[..., 1], min=0, max=h-1)
+    pos = kp_in_hm.int()
+    flat_idx = pos[..., 0] + pos[..., 1] * w
+    hm = hm.view(bs, nv, nj, -1)
+    hm = torch.softmax(hm, dim=-1)
+    max_pt = hm.view(-1, h*w)[torch.arange(bs*nv*nj), flat_idx.long().flatten()]
+    return - torch.mean(torch.log(max_pt))
+
+
+def heatmap_central_loss(hm, kp_in_hm):
+    """
+    the loss to that keeps heatmap gather around the ground truth point.
+    hm: batch_size x n_views x n_joints x h x w
+    kp_in_hm: batch_size x n_views x n_joints x 2
+    """
+    bs, nv, nj, h, w = hm.shape
+    grid = torch.stack(torch.meshgrid(torch.arange(h), torch.arange(w), indexing='xy'), dim=2).to(hm.device)
+    dist = torch.norm(grid.reshape(1, 1, 1, h, w, 2)
+            - kp_in_hm.reshape(bs, nv, nj, 1, 1, 2), dim=-1)
+    hm = torch.square(hm)
+    hm_normed = hm / torch.sum(hm, dim=(-1, -2), keepdim=True)
+    # hm = torch.softmax(torch.square(hm).view(bs, nv, nj, -1), axis=-1).view(bs, nv, nj, h, w)
+    return torch.mean(hm_normed * dist)
+    # gt_hm = np.exp(- dist2 / (2 * 2 **2))
 
 
 def heatmap_norm_max_dist(hm1, hm2, joint_vis=None):

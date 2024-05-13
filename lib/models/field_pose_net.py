@@ -397,13 +397,13 @@ class FieldPoseNet(nn.Module):
             else:
                 new_state_dict[key] = state_dict[key]
             
-        for key in new_state_dict.keys():
-            if key.startswith("final_layer2"):
-                new_state_dict[key] = new_state_dict[key][:48]
-            elif key.startswith("final_layer"):
-                new_state_dict[key] = new_state_dict[key][:17]
-            elif key.startswith("confidences.head.4"):
-                new_state_dict[key] = new_state_dict[key][:33]
+        # for key in new_state_dict.keys():
+        #     if key.startswith("final_layer2"):
+        #         new_state_dict[key] = new_state_dict[key][:48]
+        #     elif key.startswith("final_layer"):
+        #         new_state_dict[key] = new_state_dict[key][:17]
+        #     elif key.startswith("confidences.head.4"):
+        #         new_state_dict[key] = new_state_dict[key][:33]
             
         self.load_state_dict(new_state_dict, strict=False)
 
