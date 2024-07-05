@@ -30,7 +30,6 @@ class Human36MBaseDataset(Dataset):
                  image_shape=(256, 256),
                  undistort=True,
                  heatmap_shape=(64, 64),
-                 sample_level=2,
                  output_type=[],
                  with_damaged_actions=False,
                  transform=None,
@@ -41,7 +40,6 @@ class Human36MBaseDataset(Dataset):
         self.undistort = undistort
         self.image_shape = image_shape
         self.heatmap_shape = heatmap_shape
-        self.sample_level = sample_level
         self.transform = transform
         self.output_type = output_type
         self.crop = crop
@@ -91,20 +89,19 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
     The human3.6M dataset interface for pretraining.
     Returns 2D joint feature map and density field map.
     """
-    def __init__(self, root_dir, label_dir,
+    def __init__(self, root_dir,
                  sigma=2,
                  image_shape=(256, 256),
                  undistort=True,
                  heatmap_shape=(64, 64),
                  output_type=None,
-                 sample_level=2,
                  transform=None,
                  with_damaged_actions=True,
                  is_train=False,
-                 limb_sigmas=[],
                  crop=True):
+        label_dir = os.path.join(root_dir, 'extra', 'human36m-monocular-labels-GTbboxes.npy')
         super(Human36MMonocularFeatureMapDataset, self).__init__(
-            root_dir, label_dir, image_shape, undistort, heatmap_shape, sample_level, output_type,
+            root_dir, label_dir, image_shape, undistort, heatmap_shape, output_type,
             with_damaged_actions, transform, is_train, crop
         )
         self.sigma = sigma
@@ -129,8 +126,7 @@ class Human36MMonocularFeatureMapDataset(Human36MBaseDataset):
 
         # load image
         image_path = os.path.join(
-            self.root_dir, 'processed', '_undistorted' * self.undistort, subject,
-            action, 'imageSequence' + '-undistorted'*self.undistort,
+            self.root_dir, 'processed', subject, action, 'imageSequence' + '-undistorted'*self.undistort,
             camera_name, 'img_%06d.jpg' % (frame_idx+1))
         assert os.path.isfile(image_path), '%s doesn\'t exist' % image_path
         image = cv2.imread(image_path)
@@ -429,11 +425,10 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
     """
     Human3.6M dataset interface, reading monocular data
     """
-    def __init__(self, root_dir, label_dir,
+    def __init__(self, root_dir,
                  image_shape=(256, 256),
                  undistort=True,
                  heatmap_shape=(64, 64),
-                 sample_level=2,
                  output_type=[],
                  with_damaged_actions=False,
                  transform=None,
@@ -443,8 +438,9 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
                  use_cameras=[1, 2, 3, 4],
                  stereo_sample=False,
                  sigma=2):
+        label_dir = os.path.join(root_dir, 'extra', 'human36m-multiview-labels-GTbboxes.npy')
         super(Human36MMultiViewDataset, self).__init__(
-            root_dir, label_dir, image_shape, undistort, heatmap_shape, sample_level, output_type,
+            root_dir, label_dir, image_shape, undistort, heatmap_shape, output_type,
             with_damaged_actions, transform, is_train, crop
         )
 
@@ -488,8 +484,7 @@ class Human36MMultiViewDataset(Human36MBaseDataset):
 
             # load image
             image_path = os.path.join(
-                self.root_dir, 'processed', '_undistorted' * self.undistort, subject,
-                action, 'imageSequence' + '-undistorted'*self.undistort,
+                self.root_dir, 'processed', subject, action, 'imageSequence' + '-undistorted'*self.undistort,
                 camera_name, 'img_%06d.jpg' % (frame_idx+1))
             assert os.path.isfile(image_path), f'{image_path} doesn\'t exist, index: {idx:d}' 
             image = cv2.imread(image_path)

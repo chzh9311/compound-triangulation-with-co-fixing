@@ -4,15 +4,14 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-from Camera import Camera
+from lib.dataset.Camera import Camera
 
-sys.path.append("/home/chenzhuo/Projects/DNN_3DHPE/Mine/DensityFieldPose/lib/utils")
-from functions import project
+from lib.utils.functions import project
 
 
 label_path = sys.argv[1]
 
-with open(label_path, 'rb') as lf:
+with open(os.path.join(label_path, 'human36m-multiview-labels-GTbboxes.npy'), 'rb') as lf:
     labels = np.load(lf, allow_pickle=True).item()
 
 subjects = labels['subject_names']
@@ -58,4 +57,4 @@ for frame in tqdm(labels["table"]):
 monocular_info = np.concatenate(all_info)
 labels["table"] = monocular_info
 
-np.save("../../data/h36m/labels/human36m-monocular-labels-GTbboxes.npy", labels)
+np.save(os.path.join(label_path, "human36m-monocular-labels-GTbboxes.npy"), labels)

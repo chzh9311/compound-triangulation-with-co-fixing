@@ -32,15 +32,14 @@ from lib.dataset.joint import build_2D_dataset
 from lib.models.field_pose_net import get_FPNet
 # from lib.models.ditehrnet import DiteHRNet
 from lib.utils.DictTree import create_human_tree
-from lib.utils.functions import fit_1d_density, calc_vanish, calc_vanish_from_vmap, normalize, collate_pose
-from lib.utils.evaluate import heatmap_MSE, heatmap_weighted_MSE, vector_error, heatmap_norm_max_dist, dire_map_error, dire_map_angle_err
+from lib.utils.functions import normalize, collate_pose
+from lib.utils.evaluate import heatmap_MSE, heatmap_weighted_MSE, vector_error, heatmap_norm_max_dist, dire_map_angle_err
 from lib.utils.utils import make_logger, time_to_string
 from lib.utils.vis import vis_heatmap_data, vis_specific_vector_field
 from config import get_config, save_config, update_config
 from config import config as default_cfg
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
 
 def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree, writer, logger, debug=False):
     model.train()
@@ -80,13 +79,10 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
         # Backpropagation
         optimizer.zero_grad()
         loss.backward()
-        # Handle with gradient explosion
-        # if reg_method == "heatmap2d":
-        #     nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
         
         # visualization with tensorboard
-        if batch_i % config.TRAIN.LOSS_FREQ == config.TRAIN.LOSS_FREQ - 1 or debug:
+        if batch_i % config.TRAIN.LOSS_INTERVAL == config.TRAIN.LOSS_INTERVAL - 1 or debug:
             current = batch_i * config.TRAIN.BATCH_SIZE
             loss_info = f"Total loss: {loss.item():.4e}"
             for out in out_labels:
@@ -101,7 +97,7 @@ def train_one_epoch(epoch, config, dataloader, model, loss_fns, optimizer, htree
                 "training loss", loss_values, epoch * size + batch_i*config.TRAIN.BATCH_SIZE
             )
 
-        if batch_i % config.TRAIN.VIS_FREQ == config.TRAIN.VIS_FREQ - 1 or debug:
+        if batch_i % config.TRAIN.VIS_INTERVAL == config.TRAIN.VIS_INTERVAL - 1 or debug:
             vis_idx = np.random.randint(0, required_data.images.shape[0])
             images = required_data.images[vis_idx, ...].detach().cpu().numpy() # type: ignore
             image = np.stack([images[i, ...] for i in range(images.shape[0])], axis=2)
@@ -293,24 +289,11 @@ def train(cfg, debug=False):
         model.load_state_dict(prev_ckeckpoint["model"], strict=True)
         best_loss = prev_ckeckpoint["loss"]
         optimizer.load_state_dict(prev_ckeckpoint["optimizer"])
-        if cfg.TRAIN.MID_CHECKPOINTS == 0:
-            start_epoch = prev_ckeckpoint["epoch"] + 1
-            # for i in range(start_epoch):
-            #     scheduler.step()
-            start_sub_epoch = 0
-            seed = int(time.time())
-        if cfg.TRAIN.MID_CHECKPOINTS > 0:
-            seed = prev_ckeckpoint["random_seed"]
-            start_epoch = prev_ckeckpoint["epoch"]
-            start_sub_epoch = prev_ckeckpoint["sub_epoch"] + 1
-            if start_sub_epoch == cfg.TRAIN.MID_CHECKPOINTS:
-                start_epoch += 1
-                start_sub_epoch = 0
-        logger.info(f"Loaded checkpoint from {cfg.TRAIN.CHECKPOINT}")
+        start_epoch = prev_ckeckpoint["epoch"] + 1
+        seed = int(time.time())
     else:
         # Initialize
         start_epoch = 0
-        start_sub_epoch = 0
         seed = int(time.time())
         best_loss = 1
 
@@ -324,78 +307,28 @@ def train(cfg, debug=False):
         logger.info(f"{20*'-'} Starting the {epoch}th epoch {20*'-'}")
         # Train for one epoch
         logger.info("Start Training...")
-        if cfg.TRAIN.MID_CHECKPOINTS == 0:
-            train_one_epoch(epoch, cfg, train_loader, model, train_loss_fns, optimizer, htree, writer, logger, debug)
+        train_one_epoch(epoch, cfg, train_loader, model, train_loss_fns, optimizer, htree, writer, logger, debug)
 
-            # Test for the current epoch
-            logger.info("Start Testing...")
-            current_loss = test_one_epoch(epoch, cfg, test_loader, model, test_loss_fns, htree, writer, logger)
+        # Test for the current epoch
+        logger.info("Start Testing...")
+        current_loss = test_one_epoch(epoch, cfg, test_loader, model, test_loss_fns, htree, writer, logger)
 
-            # Dump checkpoint
-            state = {}
-            state["optimizer"] = optimizer.state_dict()
-            state["model"] = model.state_dict()
-            state["epoch"] = epoch
-            state["loss"] = current_loss
-            if not os.path.exists(out_path):
-                os.mkdir(out_path)
-            with open(os.path.join(out_path, f"checkpoint_epoch{epoch}_loss{current_loss:4e}.pkl"), "wb") as ckpt:
-                pickle.dump(state, ckpt)
-            logger.info(f"Dumped Checkpoint to {out_path}")
+        # Dump checkpoint
+        state = {}
+        state["optimizer"] = optimizer.state_dict()
+        state["model"] = model.state_dict()
+        state["epoch"] = epoch
+        state["loss"] = current_loss
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
+        with open(os.path.join(out_path, f"checkpoint_epoch{epoch}_loss{current_loss:4e}.pkl"), "wb") as ckpt:
+            pickle.dump(state, ckpt)
+        logger.info(f"Dumped Checkpoint to {out_path}")
 
-            if current_loss < best_loss:
-                best_loss = current_loss
-                torch.save(model.state_dict(), os.path.join(out_path, f"best.pth"))
-                logger.info(f"saved weights to {out_path}")
-        else:
-            nparts = cfg.TRAIN.MID_CHECKPOINTS + 1
-
-            # use previous seed only in the first iteration.
-            if cfg.TRAIN.CONTINUE and start_sub_epoch:
-                pass
-            else:
-                seed = int(time.time())
-            cfg.TRAIN.CONTINUE = False
-            np.random.seed(seed)
-
-            it_order = np.arange(dnum)
-            if cfg.TRAIN.SHUFFLE:
-                np.random.shuffle(it_order)
-            for m in range(start_sub_epoch, nparts):
-                train_set.set_sample_order(it_order[int(m*dnum/nparts):int((m+1)*dnum/nparts)])
-                mid_train_loader = DataLoader(
-                    dataset=train_set,
-                    batch_size=cfg.TRAIN.BATCH_SIZE,
-                    shuffle=cfg.TRAIN.SHUFFLE,
-                    collate_fn=collate_pose,
-                    num_workers=cfg.TRAIN.NUM_WORKERS
-                )
-
-                train_one_epoch(epoch*nparts+m+1, cfg, mid_train_loader, model, train_loss_fns, optimizer, htree, writer, logger, debug)
-
-                # Test for the current epoch
-                logger.info("Start Testing...")
-                current_loss = test_one_epoch(epoch*nparts+m+1, cfg, test_loader, model, test_loss_fns, htree, writer, logger)
-
-                # Dump checkpoint
-                state = {}
-                state["optimizer"] = optimizer.state_dict()
-                state["model"] = model.state_dict()
-                state["epoch"] = epoch
-                state["loss"] = current_loss
-                state["random_seed"] = seed
-                state["sub_epoch"] = m
-                if not os.path.exists(out_path):
-                    os.mkdir(out_path)
-                with open (os.path.join(out_path, f"checkpoint_epoch{epoch + (m+1)/nparts:.3f}_loss{current_loss:4e}.pkl"), "wb") as ckpt:
-                    pickle.dump(state, ckpt)
-                logger.info(f"Dumped Checkpoint to {out_path}")
-
-                if current_loss < best_loss:
-                    best_loss = current_loss
-                    torch.save(model.state_dict(), os.path.join(out_path, f"best.pth"))
-                    logger.info(f"saved weights to {out_path}")
-            start_sub_epoch = 0
+        if current_loss < best_loss:
+            best_loss = current_loss
+            torch.save(model.state_dict(), os.path.join(out_path, f"best.pth"))
+            logger.info(f"saved weights to {out_path}")
         scheduler.step()
     writer.close()
 

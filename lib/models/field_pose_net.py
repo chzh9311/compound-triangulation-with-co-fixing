@@ -202,9 +202,6 @@ class FieldPoseNet(nn.Module):
             # self.vol_confidences = GlobalAveragePoolingHead(512*block.expansion, 32)
             self.alg_confidences = GlobalAveragePoolingHead(512*block.expansion, cfg.MODEL.NUM_JOINTS)
         
-        # self.is_pretrain=cfg.TRAIN.IS_PRETRAIN
-        # self.NUM_JOINTS = cfg.MODEL.NUM_JOINTS
-
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
@@ -362,15 +359,16 @@ class FieldPoseNet(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
         # Remove the parameters of final_layer in pretrained model
-        if not self.load_final_weights:
-            del (state_dict["final_layer.weight"])
-            del (state_dict["final_layer.bias"])
-        else:
-            state_dict["final_layer.weight"] = state_dict["final_layer.weight"][:17, ...]
-            state_dict["final_layer.bias"] = state_dict["final_layer.bias"][:17]
-            if hasattr(self, "deconv_layers2"):
-                state_dict["final_layer2.weight"] = state_dict["final_layer2.weight"][:48, ...]
-                state_dict["final_layer2.bias"] = state_dict["final_layer2.bias"][:48]
+        if 'final_layer.weight' in state_dict:
+            if not self.load_final_weights:
+                del (state_dict["final_layer.weight"])
+                del (state_dict["final_layer.bias"])
+            else:
+                state_dict["final_layer.weight"] = state_dict["final_layer.weight"][:17, ...]
+                state_dict["final_layer.bias"] = state_dict["final_layer.bias"][:17]
+                if hasattr(self, "deconv_layers2"):
+                    state_dict["final_layer2.weight"] = state_dict["final_layer2.weight"][:48, ...]
+                    state_dict["final_layer2.bias"] = state_dict["final_layer2.bias"][:48]
         self.load_state_dict(state_dict, strict=False)
         # else:
         #     logger.error('=> imagenet pretrained model dose not exist')

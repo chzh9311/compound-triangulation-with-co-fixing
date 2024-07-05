@@ -112,15 +112,15 @@ class MultiViewFPNet(nn.Module):
         kps_in_hm = self.soft_argmax(heatmap) # b, nv, njoint, 2
         # kps_in_hm = kps_in_hm[:, :, :, [1, 0]]
 
-        kps = torch.stack((kps_in_hm[:, :, :, 1] * images_shape[3] / w,
-                           kps_in_hm[:, :, :, 0] * images_shape[4] / h), dim=3).unsqueeze(-1)
+        kps = torch.stack((kps_in_hm[:, :, :, 0] * images_shape[3] / w,
+                           kps_in_hm[:, :, :, 1] * images_shape[4] / h), dim=3).unsqueeze(-1)
 
         out_values.keypoints2d = kps
         if not self.use_gt:
             if fix_heatmap:
                 kps_combined, di_combined, limb_kps_combined, dm_fixed, hm_fixed = self.fusion_layer(
-                    heatmap, out_values.lof, projections, rotation, cam_ctr, images_shape[3:], out_values.confidences,
-                    *self.fix_ths)
+                    heatmap, out_values.lof.view(batch_size, n_views, self.num_limbs, -1, *out_values.lof.shape[-2:]),
+                    projections, rotation, cam_ctr, images_shape[3:], out_values.confidences, *self.fix_ths)
                 out_values.di_combined = di_combined
             # limb_pairs = np.array(htree.limb_pairs)
 
@@ -140,8 +140,8 @@ class MultiViewFPNet(nn.Module):
             out_values.di_vectors = di
             norm_maps = torch.norm(di_maps, dim=3)
             pos_in_hm = self.soft_argmax(norm_maps)
-            limb_kps = torch.stack((pos_in_hm[:, :, :, 1] * images_shape[3] / h,
-                                pos_in_hm[:, :, :, 0] * images_shape[4] / w), dim=3)
+            limb_kps = torch.stack((pos_in_hm[:, :, :, 0] * images_shape[3] / h,
+                                pos_in_hm[:, :, :, 1] * images_shape[4] / w), dim=3)
             kps_3d = optimize_wrt_params(kps, projections, htree, self.use_lof, confidences=out_values.confidences,
                                         intrinsics=intrinsics, rotation=rotation, di_vectors=di, line_pos=limb_kps,
                                         bone_lengths=bls, sca_steps=sca_steps)

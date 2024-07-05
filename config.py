@@ -40,10 +40,13 @@ def update_config(config, args):
     if args.cfg:
         new_cfg = get_config(args.cfg)
         config = overwrite_cfg(config, new_cfg)
-    if args.runMode == "train" and args.dir:
-        config.MODEL.BACKBONE_WEIGHTS = os.path.join(args.dir, "weights", "best.pth")
-    elif args.runMode == "train" and args.epochs:
-        config.TRAIN.NUM_EPOCHS = args.epochs
+    if args.runMode == "train":
+        if args.epochs:
+            config.TRAIN.NUM_EPOCHS = args.epochs
+    else:
+        if args.weight:
+            config.MODEL.BACKBONE_WEIGHTS = args.weight
+
     return config
 
 config = edict()
@@ -52,24 +55,21 @@ config = edict()
 config.GPUS = [0, 1]
 
 config.DATASET = edict()
-config.DATASET.NAME = "totalcapture"
-config.DATASET.ROOT = "/home/chenzhuo/data/h36m-fetch/processed"
-config.DATASET.LABELS = "/home/chenzhuo/data/h36m-fetch/extra/human36m-multiview-labels-GTbboxes.npy"
-config.DATASET.MONOLABELS = "data/h36m/labels/human36m-monocular-labels-GTbboxes.npy"
+config.DATASET.NAME = "human3.6m"
+config.DATASET.ROOT = "/home/chenzhuo/data/h36m-fetch/"
 config.DATASET.WITH_DAMAGED_ACTIONS = True
 
 config.MODEL = edict()
-config.MODEL.NAME = "lofpose"
 config.MODEL.STYLE = "pytorch"
 config.MODEL.SOFTMAX_BETA = 100
-config.MODEL.IMAGE_SIZE = [320, 320]
-config.MODEL.NUM_JOINTS = 16
-config.MODEL.NUM_LIMBS = 15
+config.MODEL.IMAGE_SIZE = [384, 384]
+config.MODEL.NUM_JOINTS = 17
+config.MODEL.NUM_LIMBS = 16
 config.MODEL.INIT_WEIGHTS = True
 config.MODEL.LOAD_FINAL_WEIGHTS = True
 config.MODEL.LOAD_DECONVS = True
 config.MODEL.PRETRAINED = ""
-config.MODEL.BACKBONE_WEIGHTS = "log/end2end/train_ttc_cam13_pure2d/epoch0-2/weights/best.pth"
+config.MODEL.BACKBONE_WEIGHTS = ""
 config.MODEL.LAMBDA = 0
 config.MODEL.BACKBONE = "ResNet"
 config.MODEL.USE_CONFIDENCE = True
@@ -91,7 +91,7 @@ config.MODEL.BACKBONE_OUTPUT = ['heatmap', 'confidences']
 
 config.MODEL.EXTRA = edict()
 config.MODEL.EXTRA.SIGMA = 2
-config.MODEL.EXTRA.HEATMAP_SIZE = [80, 80]
+config.MODEL.EXTRA.HEATMAP_SIZE = [96, 96]
 config.MODEL.EXTRA.FINAL_CONV_KERNEL = 1
 config.MODEL.EXTRA.DECONV_WITH_BIAS = False
 config.MODEL.EXTRA.NUM_DECONV_LAYERS = 3
@@ -100,7 +100,6 @@ config.MODEL.EXTRA.NUM_DECONV_KERNELS = [4, 4, 4]
 config.MODEL.EXTRA.NUM_LAYERS = 152
 
 config.TRAIN = edict()
-config.TRAIN.IS_PRETRAIN = True
 config.TRAIN.BATCH_SIZE = 8
 config.TRAIN.USE_CAMERAS = [1, 3]
 config.TRAIN.REFINE_INDICATOR = 0
@@ -117,10 +116,9 @@ config.TRAIN.LOSS_WEIGHT = [10000.0, 0]
 config.TRAIN.NUM_WORKERS = 8
 config.TRAIN.NUM_EPOCHS = 10
 config.TRAIN.CONTINUE = False
-config.TRAIN.CHECKPOINT = "log/end2end/train_ttc_cam14_pure2d/weights/checkpoint_epoch4_loss4.166067e+01.pkl"
-config.TRAIN.MID_CHECKPOINTS = 0
-config.TRAIN.LOSS_FREQ = 20
-config.TRAIN.VIS_FREQ = 2000
+config.TRAIN.CHECKPOINT = ""
+config.TRAIN.LOSS_INTERVAL = 20
+config.TRAIN.VIS_INTERVAL = 2000
 
 config.TEST = edict()
 config.TEST.WRITE_LOG = True

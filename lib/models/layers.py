@@ -15,7 +15,7 @@ class SoftArgmax(nn.Module):
         """
         super(SoftArgmax, self).__init__()
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        self.gridy, self.gridx = torch.meshgrid(torch.arange(w), torch.arange(h), indexing="xy")
+        self.gridx, self.gridy = torch.meshgrid(torch.arange(w), torch.arange(h), indexing="xy")
         # self.gridy, self.gridx = gridy.to(device).float(), gridx.to(device).float()
         self.beta = beta
         self.hm_shape = (h, w)

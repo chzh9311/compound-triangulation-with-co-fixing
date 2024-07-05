@@ -9,10 +9,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 from math import sqrt, floor
 import seaborn as sns
-import logging
+
 
 def solve(A, b):
-    if torch.__version__ == "1.2.0":
+    if torch.__version__ <= "1.8.0":
         return torch.solve(b, A)[0]
     else:
         return torch.linalg.solve(A, b)

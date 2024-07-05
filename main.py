@@ -104,7 +104,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
         loss.backward()
         optimizer.step()
         
-        if batch_i % config.TRAIN.LOSS_FREQ == config.TRAIN.LOSS_FREQ - 1 or debug:
+        if batch_i % config.TRAIN.LOSS_INTERVAL == config.TRAIN.LOSS_INTERVAL - 1 or debug:
             current = batch_i * config.TRAIN.BATCH_SIZE
             log_info = f"Total loss: {losses.total:>5f}"
             for k in losses.keys():
@@ -117,7 +117,7 @@ def train_one_epoch(config, epoch, train_loader, model, loss_fns, optimizer, hum
                 losses,
                 global_step=epoch * size + batch_i * config.TRAIN.BATCH_SIZE
             )
-        if batch_i % config.TRAIN.VIS_FREQ == config.TRAIN.VIS_FREQ - 1 or debug:
+        if batch_i % config.TRAIN.VIS_INTERVAL == config.TRAIN.VIS_INTERVAL - 1 or debug:
             vis_idx = np.random.randint(0, required_data.images.shape[0])
             images = required_data.images[vis_idx, ...].detach().cpu().numpy()
             images = np.stack([images[:, 2-i, ...] for i in range(3)], axis=3)
@@ -207,9 +207,9 @@ def test_one_epoch(config, epoch, dataloader, model, test_loss_fns, human_tree, 
                 bls = None
             required_data.num_joints = config.MODEL.NUM_JOINTS
             required_data.num_limbs = config.MODEL.NUM_LIMBS
-            out_values = model(htree=human_tree, **required_data)
-                                           # out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, required_data.rotation, required_data.cam_ctr,
-                            #    fix_heatmap=config.MODEL.CO_FIXING.FIX_HEATMAP)
+            out_values = model(htree=human_tree, fix_heatmap=config.MODEL.CO_FIXING.FIX_HEATMAP, **required_data)
+                                # out_values = model(required_data.images, required_data.projections, human_tree, required_data.intrinsics, required_data.rotation, required_data.cam_ctr,
+                                # fix_heatmap=config.MODEL.CO_FIXING.FIX_HEATMAP)
             # if batch_i == 99:
             #     print(total_time / 100)
             #     break
@@ -493,22 +493,14 @@ def run_model(cfg, runMode='test', debug=True):
 
 
 def main():
-    # cfg = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320-singlebranch.yaml")
-    # cfg = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320.yaml")
-    # cfg = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320-volumetric.yaml")
-    # cfg = get_config("experiments/ResNet152/human3.6m-ResNet152-384x384-volumetric.yaml")
-    # cfg = get_config("experiments/ResNet152/human3.6m-ResNet152-384x384.yaml")
-    # cfg = get_config("experiments/ResNet152/human3.6m-ResNet152-384x384-singlebranch.yaml")
-    # cfg = get_config("openpose/h36m-openpose-backbone-384x384")
-    # cfg = get_config("hourglass/hourglass2b-256x256")
     parser = ArgumentParser(
         prog="End-to-end Pretraining",
         description="network training & testing program."
     )
     parser.add_argument("--cfg", default="experiments/ResNet152/totalcapture-ResNet152-320x320-singlebranch.yaml")
     parser.add_argument("--runMode")
+    parser.add_argument("-w", "--weight")
     parser.add_argument("-e", "--epochs")
-    parser.add_argument("-d", "--dir", help="the log directory of pretrained backbone to be tested.")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--dump", default=None)
     args = parser.parse_args()
@@ -518,10 +510,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # test_2views()
-    # cfg1 = get_config("experiments/ResNet152/human3.6m-ResNet152-384x384-singlebranch.yaml")
-    # cfg2 = get_config("experiments/ResNet152/human3.6m-ResNet152-384x384.yaml")
-
-    # cfg1 = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320-singlebranch.yaml")
-    # cfg2 = get_config("experiments/ResNet152/totalcapture-ResNet152-320x320.yaml")
-    # qualititative_analysis(cfg1, cfg2)

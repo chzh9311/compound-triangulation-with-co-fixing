@@ -18,7 +18,7 @@ LIMB_PAIRS = HT.limb_pairs
 
 class TotalCaptureBaseDataset(Dataset):
 
-    def __init__(self, root_dir, label_dir,
+    def __init__(self, root_dir,
                  image_shape=(256, 256),
                  undistort=True,
                  heatmap_shape=(64, 64),
@@ -29,7 +29,6 @@ class TotalCaptureBaseDataset(Dataset):
 
         super(TotalCaptureBaseDataset, self).__init__()
         self.root_dir = root_dir
-        self.label_dir = label_dir
         self.undistort = undistort
         self.image_shape = image_shape
         self.heatmap_shape = heatmap_shape
@@ -47,7 +46,7 @@ class TotalCaptureBaseDataset(Dataset):
         test_seqs = {'rom':[], 'walking':[2], 'acting':[3], 'running':[], 'freestyle':[3]}
 
     
-    def _use_particular_cameras(self, use_cameras, drop_outsiders):
+    def _use_particular_cameras(self, use_cameras):
         """
         drop outsiders: 0 means no dropping; 1 means dropping frames fully out of view; 2 means dropping frames part out of view.
         """
@@ -57,13 +56,7 @@ class TotalCaptureBaseDataset(Dataset):
             jp2d = sample['joints_2d']
             jbox = [np.min(jp2d[:, 0]), np.min(jp2d[:, 1]), np.max(jp2d[:, 0]), np.max(jp2d[:, 1])]
             if sample['camera_id'] + 1 in use_cameras:
-                # if drop_outsiders == 1 and (sample['box'][2] > 1920 or sample['box'][3] > 1080 or sample['box'][0] < 0 or sample['box'][1] < 0):
-                if drop_outsiders == 1 and (jbox[0] > 1920 or jbox[1] > 1080 or jbox[2] < 0 or jbox[3] < 0):
-                    pass
-                elif drop_outsiders == 2 and (jbox[0] < 0 or jbox[1] < 0 or jbox[2] > 1920 or jbox[3] > 1080):
-                    pass
-                else:
-                    self.labels.append(sample)
+                self.labels.append(sample)
 
     def _sample_frames(self, rate):
         if rate > 1:
@@ -78,7 +71,7 @@ class TotalCaptureBaseDataset(Dataset):
     
 class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
     
-    def __init__(self, root_dir, label_dir,
+    def __init__(self, root_dir,
                  sigma=2,
                  image_shape=(256, 256),
                  undistort=True,
@@ -89,11 +82,9 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
                  frame_sample_rate=1,
                  feature_dim=3,
                  use_cameras=[1, 3, 5, 7],
-                 refine_indicator=0,
-                 limb_sigmas=[],
                  crop=True):
         super(TotalCaptureMonocularFeatureMapDataset, self).__init__(
-            root_dir, label_dir, image_shape, undistort, heatmap_shape, output_type,
+            root_dir, image_shape, undistort, heatmap_shape, output_type,
             transform, is_train, crop
         )
         self.sigma = sigma
@@ -101,10 +92,10 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
         self.feature_dim = feature_dim
 
         split = 'train' if is_train else 'validation'
-        with open(os.path.join(self.label_dir, f'totalcapture_{split}.pkl'), 'rb') as lf:
+        with open(os.path.join(self.root_dir, 'annot', f'totalcapture_{split}.pkl'), 'rb') as lf:
             self.labels= pickle.load(lf)
         
-        self._use_particular_cameras(use_cameras, refine_indicator)
+        self._use_particular_cameras(use_cameras)
         self._sample_frames(frame_sample_rate)
     
     def __len__(self):
@@ -114,7 +105,7 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
         sample = self.labels[idx]
         subject = sample['subject']
         action = self.action_names[sample["action"] - 1]
-        img_path = os.path.join(self.root_dir, sample['image'])
+        img_path = os.path.join(self.root_dir, 'images', sample['image'])
         assert os.path.isfile(img_path), f'{img_path} doesn\'t exist'
 
         bbox = sample['box']
@@ -188,7 +179,7 @@ class TotalCaptureMonocularFeatureMapDataset(TotalCaptureBaseDataset):
 
 
 class TotalCaptureMultiViewDataset(TotalCaptureBaseDataset):
-    def __init__(self, root_dir, label_dir,
+    def __init__(self, root_dir, 
                  image_shape=(256, 256),
                  undistort=True,
                  heatmap_shape=(64, 64),
@@ -199,27 +190,25 @@ class TotalCaptureMultiViewDataset(TotalCaptureBaseDataset):
                  use_gt_data_type=None,
                  use_cameras=[1, 3, 5, 7],
                  frame_sample_rate=1,
-                 refine_indicator=0,
                  sigma=2):
         super(TotalCaptureMultiViewDataset, self).__init__(
-            root_dir, label_dir, image_shape, undistort, heatmap_shape, output_type,
+            root_dir, image_shape, undistort, heatmap_shape, output_type,
             transform, is_train, crop
         )
 
         self.n_views = len(use_cameras)
         self.use_gt_data_type = use_gt_data_type
         self.use_cameras = use_cameras
-        self.refine_id = refine_indicator
         split = 'train' if is_train else 'validation'
         self.label_file = os.path.join('offlines', 'totalcapture', "multiview",
-                                       f"{split}_cam{'-'.join([str(c) for c in self.use_cameras])}_ref{self.refine_id}.pkl")
+                                       f"{split}_cam{'-'.join([str(c) for c in self.use_cameras])}.pkl")
         if os.path.exists(self.label_file):
             with open(self.label_file, 'rb') as pkf:
                 self.labels = pickle.load(pkf)
         else:
-            with open(os.path.join(self.label_dir, f'totalcapture_{split}.pkl'), 'rb') as lf:
+            with open(os.path.join(self.root_dir, 'annot', f'totalcapture_{split}.pkl'), 'rb') as lf:
                 self.labels= pickle.load(lf)
-            self._use_particular_cameras(use_cameras, refine_indicator)
+            self._use_particular_cameras(use_cameras)
             self._generate_multi_view_labels(drop_incomplete=True)
         self._sample_frames(frame_sample_rate)
         # self._refine_frames(40)
@@ -271,7 +260,7 @@ class TotalCaptureMultiViewDataset(TotalCaptureBaseDataset):
             camera = Camera(view_data['camera']['R'], -1*view_data['camera']['R'] @ view_data['camera']['T'],
                             K, view_data['camera']['name'])
 
-            img_path = os.path.join(self.root_dir, view_data['image'])
+            img_path = os.path.join(self.root_dir, 'images', view_data['image'])
             assert os.path.isfile(img_path), f'{img_path} doesn\'t exist'
 
             bbox = view_data['box']

@@ -35,7 +35,6 @@ def build_2D_dataset(cfg, transform, is_train, crop):
     if dataset_name == "human3.6m":
         ret_set = Human36MMonocularFeatureMapDataset(
             root_dir=cfg.DATASET.ROOT,
-            label_dir=cfg.DATASET.MONOLABELS,
             sigma=cfg.MODEL.EXTRA.SIGMA,
             image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
             heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
@@ -47,7 +46,6 @@ def build_2D_dataset(cfg, transform, is_train, crop):
     elif dataset_name == "totalcapture":
         ret_set = TotalCaptureMonocularFeatureMapDataset(
             root_dir=cfg.DATASET.ROOT,
-            label_dir=cfg.DATASET.LABELS,
             sigma=cfg.MODEL.EXTRA.SIGMA,
             image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
             heatmap_shape=tuple(cfg.MODEL.EXTRA.HEATMAP_SIZE),
@@ -55,8 +53,8 @@ def build_2D_dataset(cfg, transform, is_train, crop):
             output_type=cfg.MODEL.REQUIRED_DATA,
             is_train=is_train,
             use_cameras=cfg.TRAIN.USE_CAMERAS,
+            frame_sample_rate=1 if is_train else cfg.TEST.FRAME_SAMPLE_RATE,
             transform=transform,
-            refine_indicator=cfg.TRAIN.REFINE_INDICATOR,
             crop=crop
         )
     elif dataset_name == "mhad":
@@ -91,7 +89,6 @@ def build_3D_dataset(cfg, transform, is_train, crop):
     if dataset_name == "human3.6m":
         ret_set = Human36MMultiViewDataset(
             root_dir=cfg.DATASET.ROOT,
-            label_dir=cfg.DATASET.LABELS,
             image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
             is_train=is_train,
             transform=transform,
@@ -103,17 +100,15 @@ def build_3D_dataset(cfg, transform, is_train, crop):
             sigma=cfg.MODEL.EXTRA.SIGMA,
         )
     elif dataset_name == "totalcapture":
-        train_set = TotalCaptureMultiViewDataset(
+        ret_set = TotalCaptureMultiViewDataset(
             root_dir=cfg.DATASET.ROOT,
-            label_dir=cfg.DATASET.LABELS,
             image_shape=tuple(cfg.MODEL.IMAGE_SIZE),
-            is_train=True,
+            is_train=is_train,
             transform=transform,
             crop=True,
             output_type=cfg.MODEL.REQUIRED_DATA,
             use_cameras=cfg.TRAIN.USE_CAMERAS,
             frame_sample_rate=1 if is_train else cfg.TEST.FRAME_SAMPLE_RATE,
-            refine_indicator=cfg.TRAIN.REFINE_INDICATOR,
             sigma=cfg.MODEL.EXTRA.SIGMA
         )
     elif dataset_name == "mhad":
