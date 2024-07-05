@@ -4,5 +4,4 @@ data/**
 pretrained/**
 **/__pycache__/**
 .vscode/**
-experiments/**
 offlines/**

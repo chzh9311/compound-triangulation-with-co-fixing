@@ -1,0 +1,127 @@
+GPUS:
+  - 0
+  # - 1
+DATASET:
+  NAME: totalcapture
+  ROOT: /home/chenzhuo/data/totalcapture/TotalCapture-Toolbox/data/
+MODEL:
+  STYLE: "pytorch"
+  SOFTMAX_BETA: 100
+  IMAGE_SIZE:
+    - 320
+    - 320
+  NUM_JOINTS: 16
+  NUM_LIMBS: 15
+  INIT_WEIGHTS: True
+  LOAD_FINAL_WEIGHTS: False
+  LOAD_DECONVS: False
+  PRETRAINED: log/backbone/totalcapture_ResNet152_320x320_lr1e-3/weights/best.pth
+  ## pretrained with Field branch but 
+  BACKBONE_WEIGHTS: log/end2end/train_totalcapture_ResNet152_320x320/weights/best.pth ## best result of 25.30mm
+
+  NUM_DIMS: 3
+
+  LAMBDA: 0
+  BACKBONE: ResNet
+  USE_CONFIDENCE: True
+  USE_LOF: True
+  CO_FIXING:
+    FIX_HEATMAP: True # If true, keypoints3d_combined will be appended to MODEL_OUTPUT while testing.
+    FIX_ALPHA: 2
+    VEC_IMPROVE_TH: 0.25
+    VEC_FIX_UB: 0.1
+    PTS_IMPROVE_TH: 0.25
+    PTS_FIX_UB: 400
+
+  REQUIRED_DATA:
+    - images
+    - keypoints3d
+    - projections
+    - intrinsics
+    - rotation
+    - cam_ctr
+    - limb_vis
+    - identity
+    - subject
+
+  MODEL_OUTPUT:
+    - keypoints3d
+    - keypoints3d_tri
+    - keypoints2d
+    - heatmap
+    - lof
+    - di_vectors
+    - confidences
+    # Following only for debugging
+    # - keypoints3d_combined
+    # - heatmap_fixed
+    # - lof_combined
+    # - keypoints2d_fixed
+    # - keypoints2d_combined
+
+  BACKBONE_OUTPUT:
+    - heatmap
+    - lof
+    - confidences
+
+  EXTRA:
+    SIGMA: 2
+    HEATMAP_SIZE:
+      - 80
+      - 80
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS:
+      - 256
+      - 256
+      - 256
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+    NUM_LAYERS: 152
+
+TRAIN:
+  IS_PRETRAIN: True
+  BATCH_SIZE: 4
+  USE_CAMERAS:
+    - 1
+    - 3
+    - 5
+    - 7
+  REFINE_INDICATOR: 0
+  DATA_PARALLEL: True
+  LEARNING_RATE: 1.0e-4
+  SCHEDULER:
+    STEP: 10
+    GAMMA: 0.1
+  SHUFFLE: True
+  SOFT_EP: 400 # 20^2
+  SVD_EPS: 1.0e-4
+  LOSS_WEIGHT:
+    - 1.0e+4
+    - 0
+  NUM_WORKERS: 16
+  NUM_EPOCHS: 10
+  CONTINUE: False
+  CHECKPOINT:
+  LOSS_FREQ: 20
+  VIS_FREQ: 1500
+
+TEST:
+  WRITE_LOG: True
+  BATCH_SIZE: 4
+  DATA_PARALLEL: True
+  USE_GT_DATA_TYPE:
+  LAMBDA: 0
+  VIS_FREQ: 4
+  SHUFFLE: False
+  SCA_STEPS: 3
+  NUM_WORKERS: 16
+  USE_CAMERAS:
+    - 1
+    - 3
+    - 5
+    - 7
+  FRAME_SAMPLE_RATE: 64

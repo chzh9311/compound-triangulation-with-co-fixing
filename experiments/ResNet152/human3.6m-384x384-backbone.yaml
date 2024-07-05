@@ -1,0 +1,96 @@
+GPUS:
+  - 0
+  - 1
+DATASET:
+  NAME: human3.6m
+  ROOT: /home/chenzhuo/data/h36m-fetch
+MODEL:
+  STYLE: "pytorch"
+  SOFTMAX_BETA: 100
+  IMAGE_SIZE:
+    - 384
+    - 384
+  NUM_JOINTS: 17
+  NUM_LIMBS: 16
+  INIT_WEIGHTS: True
+  LOAD_FINAL_WEIGHTS: False
+  LOAD_DECONVS: False
+  PRETRAINED: pretrained/from_lt/pretrained.pth
+  BACKBONE_WEIGHTS: 
+
+  NUM_DIMS: 3
+
+  USE_LOF: True
+  BACKBONE: ResNet
+  USE_CONFIDENCE: False
+  CONFIDENCE_NORM: False
+  FIX_HEATMAP: False
+  FIX_ALPHA: 0
+
+  REQUIRED_DATA:
+    - images
+    - heatmap
+    - lof
+    - joint_vis
+    - limb_vis
+
+  BACKBONE_OUTPUT:
+    - heatmap
+    - lof
+
+  EXTRA:
+    SIGMA: 2
+    HEATMAP_SIZE:
+      - 96
+      - 96
+    FINAL_CONV_KERNEL: 1
+    DECONV_WITH_BIAS: False
+    NUM_DECONV_LAYERS: 3
+    NUM_DECONV_FILTERS:
+      - 256
+      - 256
+      - 256
+    NUM_DECONV_KERNELS:
+      - 4
+      - 4
+      - 4
+    NUM_LAYERS: 152
+
+TRAIN:
+  BATCH_SIZE: 24
+  DATA_PARALLEL: True
+  LEARNING_RATE: 1.0e-3
+  SCHEDULER:
+    STEP: 10
+    GAMMA: 0.1
+  SHUFFLE: True
+  SOFT_EP: 400 # 20^2
+  LOSS_WEIGHT:
+    - 1.0e+4
+    - 0
+  NUM_WORKERS: 8
+  NUM_EPOCHS: 10
+  CONTINUE: False
+  CHECKPOINT:
+  LOSS_INTERVAL: 20
+  VIS_INTERVAL: 1500
+  USE_CAMERAS:
+    - 1
+    - 2
+    - 3
+    - 4
+
+TEST:
+  WRITE_LOG: True
+  BATCH_SIZE: 24
+  DATA_PARALLEL: True
+  USE_GT_DATA_TYPE:
+  LAMBDA: 0
+  VIS_FREQ: 4
+  SHUFFLE: False
+  NUM_WORKERS: 8
+  USE_CAMERAS:
+    - 1
+    - 2
+    - 3
+    - 4
