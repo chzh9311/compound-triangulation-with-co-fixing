@@ -1,5 +1,7 @@
 # Compound Triangulation & Co-fixing
 
+This is the official implementation of the TMM paper [*Joint-Limb Compound Triangulation With Co-Fixing for Stereoscopic Human Pose Estimation*](https://ieeexplore.ieee.org/abstract/document/10551483).
+
 *Note: This repository is extended with code for MHAD and joint training.*
 
 ## File Structure
@@ -9,28 +11,24 @@
     * `dataset`: the dataloaders. 
     * `models`: network model files.
     * `utils`: tools, functions, data format, etc.
-* `log`: where the output files are placed.
 * `backbone_pretrain.py`: file to pretrain 2D backbone before E2E training.
 * `config.py`: configuration processors and the default config.
 * `main.py`: file to do E2E training.
 
-## Usage
+## How to Use
 
-### Install dependencies
+For convenience, we refer to the root directory of this repo as `${ROOT}`.
+
+### Install Dependencies
 
 First install the latest torch that fits your cuda version, then install the listed requirements. Note: this repository is tested under torch version `1.13.0` and cuda version `11.7`.
 
 ```shell
+cd ${ROOT}
 pip install -r requirement.txt
 ```
 
-### Prepare data
-
-Besides the root directory that contains image data and labels, we need a local directory for labels.
-
-```shell
-mkdir data
-```
+### Prepare Data
 
 **Human3.6M**
 
@@ -62,6 +60,28 @@ ${TC_ROOT}
     `-- images
 ```
 
+### Pretrained Models
+
+Here we provide the weights for ResNet152 which we used for our model:
+
+* Pretrained on ImageNet: [link](https://download.pytorch.org/models/resnet152-b121ed2d.pth)
+* Pretrained on COCO and finetuned on Human3.6M and MPII (From [Learnable Triangulation](https://github.com/karfly/learnable-triangulation-pytorch)): [link](https://disk.yandex.ru/d/hv-uH_7TY0ONpg)
+
+Create a folder named `pretrained` under `${ROOT}` and place the weights in it. If you want the backbone pretraining step to work out-of-the-box, the folder should look like this:
+
+```shell
+pretrained
+    |-- from_lt/pose_resnet_4.5_pixels_human36m.pth
+    `-- pytorch/imagenet/resnet152-b121ed2d.pth
+```
+
+We also provide the 4-view weights for Huamn3.6M and Total Capture, which reproduces the results in the paper:
+
+* Human3.6M: [link](https://drive.google.com/file/d/1d-CL9Nlzva_llNwRtELt7lGOy_CGgt8z/view?usp=sharing)
+* Total Capture: [link](https://drive.google.com/file/d/1sjvx5d7woQKDPkOLiZpoFgRW-9JwFTdU/view?usp=sharing)
+
+Place the weights at a certain directory so the path could be referred to as `${weight_path}`. We will be using this path in the **Testing** stage.
+
 ### Training
 
 We train the model in a two-step manner: first train the 2D backbone which outputs the joint confidence heatmap and the LOF. Then we train the model end-to-end for better accuracy.
@@ -80,23 +100,16 @@ python main.py --cfg experiments/ResNet${n_layers}/${dataset}-${resolution}.yaml
 
 ### Testing
 
-Use the following command to test the trained model:
-
 ```shell
-python main.py \
-     --cfg experiments/ResNet${n_layers}/${dataset}-${resolution}.yaml \
-     --runMode test \
-     -w path/to/weight.pth
+python main.py\
+     --cfg experiments/ResNet${n_layers}/${dataset}-${resolution}.yaml\
+     --runMode test\
+     -w ${weight_path}
 ```
 
-For pretrained weights, here we provide the 4-view weights for Huamn3.6M and Total Capture, which reproduces the results in the paper:
+For this repo, we provide `n_layers=152`, `dataset=human3.6m | totalcapture` and `resolution=384x384 | 320x320` as an example.
 
-* Human3.6M: [link](https://drive.google.com/file/d/1d-CL9Nlzva_llNwRtELt7lGOy_CGgt8z/view?usp=sharing)
-* Total Capture: [link](https://drive.google.com/file/d/1sjvx5d7woQKDPkOLiZpoFgRW-9JwFTdU/view?usp=sharing)
-
-
-*Note: If you wish to train using multiple GPUS, specify the GPU ids in the config file. By default, the script only uses GPU 0 for training / testing.*
-
+*Note: If you wish to train or test using multiple GPUS, please specify the GPU ids in the config file. By default, the script only uses GPU 0 for training / testing.*
 
 ## Citation
 

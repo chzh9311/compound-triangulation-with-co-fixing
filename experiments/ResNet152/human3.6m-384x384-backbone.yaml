@@ -15,7 +15,7 @@ MODEL:
   INIT_WEIGHTS: True
   LOAD_FINAL_WEIGHTS: False
   LOAD_DECONVS: False
-  PRETRAINED: pretrained/from_lt/pretrained.pth
+  PRETRAINED: pretrained/from_lt/pose_resnet_4.5_pixels_human36m.pth
   BACKBONE_WEIGHTS: 
 
   NUM_DIMS: 3
