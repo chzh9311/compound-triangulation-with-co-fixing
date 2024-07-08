@@ -3,7 +3,7 @@ GPUS:
   - 1
 DATASET:
   NAME: human3.6m
-  ROOT: /home/chenzhuo/data/h36m-fetch
+  ROOT: /data/h36m-fetch
 MODEL:
   STYLE: "pytorch"
   SOFTMAX_BETA: 100

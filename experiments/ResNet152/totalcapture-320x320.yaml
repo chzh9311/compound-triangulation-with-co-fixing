@@ -3,7 +3,7 @@ GPUS:
   # - 1
 DATASET:
   NAME: totalcapture
-  ROOT: /home/chenzhuo/data/totalcapture/TotalCapture-Toolbox/data/
+  ROOT: /data/totalcapture/TotalCapture-Toolbox/data/
 MODEL:
   STYLE: "pytorch"
   SOFTMAX_BETA: 100

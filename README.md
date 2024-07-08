@@ -21,7 +21,7 @@ For convenience, we refer to the root directory of this repo as `${ROOT}`.
 
 ### Install Dependencies
 
-First install the latest torch that fits your cuda version, then install the listed requirements. Note: this repository is tested under torch version `1.13.0` and cuda version `11.7`.
+First install the latest torch that fits your cuda version, then install the listed requirements. *Note that this repository is tested under torch version `1.13.0` and cuda version `11.7`.*
 
 ```shell
 cd ${ROOT}
